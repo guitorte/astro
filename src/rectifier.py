@@ -35,6 +35,8 @@ CLEAR_MODE_RATIO = 3.0
 MIN_POSTERIOR_FOR_PRECISION = 0.40
 # Cross-validation: held-out hit rate must be ≥ this fraction of training rate
 CV_FLOOR = 0.80
+# Event diversity: if any single type exceeds this fraction, warn of homogeneity bias
+MAX_TYPE_FRACTION = 0.60
 
 
 def build_scorers(tight: bool = False) -> list:
@@ -134,6 +136,48 @@ def bootstrap_stability(
     mean = arr.mean()
     std = arr.std()
     return float(std / (mean + 1e-12))  # coefficient of variation
+
+
+def event_diversity_score(events: list[LifeEvent]) -> tuple[float, str]:
+    """
+    Measure how diverse the event set is across house types.
+
+    Returns:
+        (score 0.0–1.0, warning message or "")
+
+    A score of 1.0 means all events are of different types.
+    A score below 0.5 means >60% of events share the same type — this creates
+    a systematic house bias and can produce false attractors in the scoring
+    (the "homogeneous event set" failure mode from the Neymar calibration test).
+    """
+    anchor = [e for e in events if not e.held_out]
+    if not anchor:
+        return 0.0, "No anchor events."
+
+    from collections import Counter
+    counts = Counter(e.event_type.value for e in anchor)
+    n = len(anchor)
+    top_type, top_count = counts.most_common(1)[0]
+    fraction = top_count / n
+    n_distinct = len(counts)
+
+    # Simpson diversity index (1 - sum of p^2)
+    simpson = 1.0 - sum((c / n) ** 2 for c in counts.values())
+
+    warning = ""
+    if fraction > MAX_TYPE_FRACTION:
+        warning = (
+            f"Event set is homogeneous: {top_count}/{n} events are '{top_type}'. "
+            "Scoring is biased toward whichever chart best fits that house type. "
+            "Add diverse events (injuries, family, legal, relocation) to improve accuracy."
+        )
+    elif n_distinct < 3:
+        warning = (
+            f"Only {n_distinct} distinct event types across {n} events. "
+            "More variety improves discriminating power across house axes."
+        )
+
+    return round(simpson, 3), warning
 
 
 def cross_validate(
@@ -360,6 +404,11 @@ class Rectifier:
         anchor_events = [e for e in self.events if not e.held_out]
         n_anchor = len(anchor_events)
 
+        # --- Event diversity check (pre-flight) ---
+        diversity, diversity_warning = event_diversity_score(self.events)
+        if diversity_warning:
+            self._log(f"WARNING — {diversity_warning}")
+
         # --- Loop 0 ---
         rising_signs = self.loop0_morin_filter()
 
@@ -440,6 +489,8 @@ class Rectifier:
             notes_parts.append(
                 f"Only {n_anchor} anchor events — precision capped at {uncertainty} min"
             )
+        if diversity_warning:
+            notes_parts.append(diversity_warning)
 
         result = RectificationResult(
             rectified_time_minutes=top2.time_minutes,

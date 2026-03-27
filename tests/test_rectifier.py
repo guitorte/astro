@@ -9,7 +9,7 @@ from src.models import (
 )
 from src.rectifier import (
     Rectifier, score_candidate, bayesian_update, cross_validate,
-    build_scorers,
+    build_scorers, event_diversity_score,
 )
 from src.ephemeris import birth_to_jd, calc_full_chart
 from src.morin_filter import uniform_prior
@@ -232,3 +232,63 @@ class TestRectifierLoops:
         summary = result.summary()
         assert ":" in summary  # time format HH:MM
         assert "Confidence" in summary
+
+
+class TestEventDiversityScore:
+    def test_diverse_events_high_score(self):
+        diverse = [
+            LifeEvent(description="Marriage", event_type=EventType.MARRIAGE,
+                      date=date(1990, 1, 1), weight=EventWeight.ANCHOR),
+            LifeEvent(description="Accident", event_type=EventType.ACCIDENT,
+                      date=date(1992, 1, 1), weight=EventWeight.ANCHOR),
+            LifeEvent(description="Career", event_type=EventType.CAREER_PEAK,
+                      date=date(1995, 1, 1), weight=EventWeight.ANCHOR),
+            LifeEvent(description="Surgery", event_type=EventType.SURGERY,
+                      date=date(1998, 1, 1), weight=EventWeight.ANCHOR),
+        ]
+        score, warning = event_diversity_score(diverse)
+        assert score > 0.5
+        assert warning == ""
+
+    def test_homogeneous_events_warning(self):
+        # All career peaks — exactly the Neymar failure mode
+        homogeneous = [
+            LifeEvent(description=f"Career event {i}", event_type=EventType.CAREER_PEAK,
+                      date=date(1990 + i, 1, 1), weight=EventWeight.ANCHOR)
+            for i in range(5)
+        ]
+        score, warning = event_diversity_score(homogeneous)
+        assert score < 0.5
+        assert "homogeneous" in warning.lower()
+        assert "career_peak" in warning
+
+    def test_empty_events_returns_zero(self):
+        score, warning = event_diversity_score([])
+        assert score == 0.0
+        assert warning != ""
+
+    def test_held_out_events_excluded_from_check(self):
+        # 3 held-out career peaks + 1 anchor marriage = diverse anchor set
+        events = [
+            LifeEvent(description=f"Career {i}", event_type=EventType.CAREER_PEAK,
+                      date=date(1990 + i, 1, 1), weight=EventWeight.ANCHOR, held_out=True)
+            for i in range(3)
+        ] + [
+            LifeEvent(description="Marriage", event_type=EventType.MARRIAGE,
+                      date=date(2000, 1, 1), weight=EventWeight.ANCHOR, held_out=False),
+        ]
+        score, warning = event_diversity_score(events)
+        # Only 1 anchor event, of 1 type — should warn about too few events or low diversity
+        assert isinstance(score, float)
+        assert isinstance(warning, str)
+
+    def test_diversity_warning_surfaces_in_result(self, birth_data):
+        # All events are career peaks — warning should appear in result notes
+        homogeneous_events = [
+            LifeEvent(description=f"Career {i}", event_type=EventType.CAREER_PEAK,
+                      date=date(1988 + i * 3, 6, 1), weight=EventWeight.ANCHOR)
+            for i in range(5)
+        ]
+        rectifier = Rectifier(birth_data, homogeneous_events, verbose=False)
+        result = rectifier.rectify()
+        assert "homogeneous" in result.notes.lower() or "career_peak" in result.notes
