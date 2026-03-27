@@ -20,26 +20,26 @@ from .models import RisingSignPrior, SIGN_NAMES
 # Keyword patterns → house emphases → probable rising signs
 # Maps life-theme keywords to likely house emphases
 THEME_HOUSE_MAP: dict[str, list[int]] = {
-    # 1st house themes (self, body, identity)
-    r"\b(athlete|sportsman|sportswoman|physical|body|health|fitness)\b": [1],
+    # 1st house themes (self, body, identity, sports body)
+    r"\b(athlete|sportsman|sportswoman|physical|body|health|fitness|boxer|wrestler|martial art)\b": [1],
     # 3rd house (communication, writing, siblings)
     r"\b(journalist|writer|author|blogger|communicat|sibling)\b": [3],
     # 4th house (home, family, roots)
     r"\b(real estate|family|roots|ancestr|homeland|domestic)\b": [4],
-    # 5th house (creativity, children, romance, entertainment)
-    r"\b(actor|actress|entertainer|performer|artist|creative|child|romance|gambl)\b": [5],
+    # 5th house (creativity, children, romance, entertainment, sport-as-play)
+    r"\b(actor|actress|entertainer|performer|artist|creative|child|romance|gambl|football|soccer|basketball|tennis|golf|sport|player|dribbl|goal|scorer|prodigy|competition|game)\b": [5, 9],
     # 6th house (work, health, service)
     r"\b(doctor|nurse|healer|service|employee|daily work|health worker)\b": [6],
     # 7th house (partnerships, law, public)
     r"\b(lawyer|attorney|partner|diplomat|marriage|public relations)\b": [7],
     # 8th house (transformation, death, finance, occult)
-    r"\b(occult|transform|crisis|death|inheritance|banker|financ|psycholog)\b": [8],
-    # 9th house (philosophy, law, religion, travel, academia)
-    r"\b(philosopher|professor|academic|university|religion|spiritual|travel|foreign|international|publish)\b": [9],
+    r"\b(occult|transform|crisis|death|inheritance|banker|financ|psycholog|record fee|world record)\b": [8],
+    # 9th house (philosophy, law, religion, travel, academia, international sport)
+    r"\b(philosopher|professor|academic|university|religion|spiritual|travel|foreign|international|publish|transfer|abroad|world cup|national team|global|tour)\b": [9],
     # 10th house (career, authority, public fame)
-    r"\b(politic|president|prime minister|ceo|director|executive|famous|celebrity|public figure|authority|career peak)\b": [10],
-    # 11th house (groups, causes, networks)
-    r"\b(activist|humanitarian|group|community|network|social cause|revolution)\b": [11],
+    r"\b(politic|president|prime minister|ceo|director|executive|famous|celebrity|public figure|authority|career peak|best in the world|iconic)\b": [10],
+    # 11th house (groups, causes, networks, team sports)
+    r"\b(activist|humanitarian|group|community|network|social cause|revolution|team|squad|club)\b": [11],
     # 12th house (isolation, institutions, hidden)
     r"\b(prison|monastery|hospital|isolation|hidden|secret|exile|addict)\b": [12],
 }
@@ -48,17 +48,19 @@ THEME_HOUSE_MAP: dict[str, list[int]] = {
 # Logic: if house H is prominent, the rising sign is likely a sign that puts
 # that house's natural sign on the Ascendant or its ruler on the ASC.
 HOUSE_TO_RISING_SIGNS: dict[int, list[int]] = {
-    1:  [1, 5, 8, 11],   # Aries/Leo/Scorpio/Aquarius rising → strong 1st
-    3:  [10, 3, 6, 1],   # Gemini/Virgo/Sagittarius/Pisces rising → busy 3rd
-    4:  [9, 10, 4, 7],   # Cancer rising → prominent 4th; Libra/Cap/Aries also
-    5:  [4, 8, 11, 1],   # Leo ascending → natural 5th house emphasis
-    6:  [5, 2, 8, 11],   # Virgo/Pisces rising common for health vocations
-    7:  [1, 4, 7, 10],   # Libra rising → strong 7th
-    8:  [1, 4, 8, 11],   # Scorpio rising → natural 8th emphasis
-    9:  [4, 7, 10, 3],   # Sagittarius rising → strong 9th
-    10: [4, 1, 7, 10],   # Capricorn rising → prominent 10th
-    11: [3, 6, 9, 12],   # Aquarius rising → active 11th
-    12: [2, 5, 8, 11],   # Pisces/Virgo rising common for 12th house themes
+    1:  [1, 5, 8, 11],      # Aries/Leo/Scorpio/Aquarius → strong 1st (Mars/Sun/Pluto/Saturn rising)
+    3:  [10, 3, 6, 1],      # Capricorn/Gemini/Virgo/Aries → active 3rd
+    4:  [9, 10, 4, 7],      # Sagittarius/Capricorn/Cancer/Libra → prominent 4th
+    5:  [4, 8, 11, 9, 1],   # Cancer/Scorpio/Aquarius/Sagittarius/Aries → strong 5th
+                             # Sagittarius included: Jupiter rules sport, play, competition
+    6:  [5, 2, 8, 11],      # Leo/Taurus/Scorpio/Aquarius → active 6th
+    7:  [1, 4, 7, 10],      # Aries/Cancer/Libra/Capricorn → strong 7th
+    8:  [1, 4, 8, 11],      # Aries/Cancer/Scorpio/Aquarius → prominent 8th
+    9:  [4, 7, 10, 9, 3],   # Cancer/Libra/Capricorn/SAGITTARIUS/Gemini → strong 9th
+                             # Sagittarius naturally rules the 9th house — must be included
+    10: [4, 1, 7, 10],      # Cancer/Aries/Libra/Capricorn → prominent 10th
+    11: [3, 6, 9, 12],      # Gemini/Virgo/Sagittarius/Pisces → active 11th
+    12: [2, 5, 8, 11],      # Taurus/Leo/Scorpio/Aquarius → 12th emphasis
 }
 
 
@@ -77,7 +79,9 @@ def rule_based_prior(biography: str) -> dict[int, float]:
                 house_scores[house] += matches
 
     # Convert house scores to rising sign scores
-    sign_scores: dict[int, float] = {s: 0.1 for s in range(1, 13)}  # small uniform prior
+    # Floor of 0.25 per sign ensures no sign is completely excluded on sparse keywords alone.
+    # The LLM prior or additional biography text can still suppress signs well below threshold.
+    sign_scores: dict[int, float] = {s: 0.25 for s in range(1, 13)}
     for house, score in house_scores.items():
         if score > 0:
             candidate_signs = HOUSE_TO_RISING_SIGNS.get(house, [])
