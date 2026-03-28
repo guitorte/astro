@@ -26,7 +26,7 @@ import math
 import swisseph as swe
 from datetime import date as date_type
 from ..models import CandidateChart, LifeEvent, TechniqueScore
-from .base import BaseScorer, orb_score
+from .base import BaseScorer, orb_score, cap_hits
 from ..ephemeris import MOSHIER_FLAG
 
 # Primary directions: fully independent mathematical framework.
@@ -120,10 +120,13 @@ class PrimaryDirectionScorer(BaseScorer):
             "IC": (mc_ra + 180) % 360,
         }
 
-        # Convert natal planets to RA
+        # Convert natal planets to RA using actual ecliptic latitudes.
+        # Planets have non-zero ecliptic latitude (up to ~17° for Pluto, ~8° for Moon);
+        # using lat=0 causes systematic RA errors that generate spurious tight-orb hits.
         planet_ras: dict[str, float] = {}
         for planet_name, planet_lon in candidate.planets.items():
-            planet_ras[planet_name] = ecliptic_to_ra(planet_lon, 0.0, obl)
+            planet_lat = candidate.planet_latitudes.get(planet_name, 0.0)
+            planet_ras[planet_name] = ecliptic_to_ra(planet_lon, planet_lat, obl)
 
         # Expected arc = age * NAIBOD_RATE
         expected_arc = age * NAIBOD_RATE
@@ -172,4 +175,4 @@ class PrimaryDirectionScorer(BaseScorer):
                             )
                         )
 
-        return scores
+        return cap_hits(scores)

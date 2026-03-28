@@ -3,6 +3,12 @@
 from abc import ABC, abstractmethod
 from ..models import CandidateChart, LifeEvent, TechniqueScore, EVENT_HOUSE_RULERSHIPS
 
+# Orb within which a house cusp is considered the same point as an angle
+_CUSP_ANGLE_DEDUP_ORB = 2.0
+
+# Maximum hits to keep per (technique, event) pair — prevents combinatorial noise
+MAX_HITS_PER_EVENT = 3
+
 
 def angle_diff(a: float, b: float) -> float:
     """Shortest angular distance between two ecliptic longitudes (0–180°)."""
@@ -53,17 +59,40 @@ def get_event_sensitive_points(
 ) -> dict[str, float]:
     """
     Return all time-sensitive points relevant to an event type:
-    the four angles + relevant house cusps.
+    the four angles + relevant house cusps (deduplicated against angles).
+
+    Deduplication: ASC ≡ H1, MC ≡ H10, DSC ≡ H7, IC ≡ H4 in most house systems.
+    If a cusp is within _CUSP_ANGLE_DEDUP_ORB degrees of any angle, the cusp is
+    omitted to prevent double-counting the same geometric point.
     """
     points = get_angles(candidate)
+    angle_lons = list(points.values())
+
     event_key = event.event_type.value
     ruled_houses = EVENT_HOUSE_RULERSHIPS.get(event_key, [1])
     for h in ruled_houses:
         if 1 <= h <= 12:
             idx = h - 1
             if idx < len(candidate.house_cusps):
-                points[f"H{h}"] = candidate.house_cusps[idx]
+                cusp_lon = candidate.house_cusps[idx]
+                # Skip if this cusp is effectively coincident with an existing angle
+                if any(angle_diff(cusp_lon, a) < _CUSP_ANGLE_DEDUP_ORB for a in angle_lons):
+                    continue
+                points[f"H{h}"] = cusp_lon
     return points
+
+
+def cap_hits(hits: list[TechniqueScore], max_hits: int = MAX_HITS_PER_EVENT) -> list[TechniqueScore]:
+    """
+    Keep only the top `max_hits` hits (by score) from a single technique/event pair.
+
+    Prevents combinatorial noise: with 80+ checks per event, many coincidental
+    tight-orb hits accumulate and overwhelm genuine signal. Keeping only the
+    highest-scoring hits enforces that only the strongest geometric relationships count.
+    """
+    if len(hits) <= max_hits:
+        return hits
+    return sorted(hits, key=lambda h: h.score, reverse=True)[:max_hits]
 
 
 class BaseScorer(ABC):

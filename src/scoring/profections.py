@@ -15,11 +15,13 @@ technique during significant events.
 import swisseph as swe
 from datetime import date as date_type
 from ..models import CandidateChart, LifeEvent, TechniqueScore
-from .base import BaseScorer, angle_diff, orb_score
+from .base import BaseScorer, angle_diff, orb_score, cap_hits
 from ..ephemeris import profected_asc, sign_ruler, MOSHIER_FLAG
 
-# Profections are independent (different time scale) → full weight
-TECHNIQUE_WEIGHT = 1.0
+# Profections have low birth-time discrimination: the profected sign changes only
+# every ~2 hours, so candidates within that window score equally on lord activation.
+# Weight reduced to 0.5 to limit noise contribution to the total score.
+TECHNIQUE_WEIGHT = 0.5
 
 
 class ProfectionScorer(BaseScorer):
@@ -72,7 +74,7 @@ class ProfectionScorer(BaseScorer):
         # Lord of year natal position
         lord_natal_lon = candidate.planets.get(lord)
         if lord_natal_lon is None:
-            return scores
+            return []
 
         for outer_name, outer_code in outer_planet_codes.items():
             transit_pos, _ = swe.calc_ut(event_jd, outer_code, MOSHIER_FLAG)
@@ -111,4 +113,4 @@ class ProfectionScorer(BaseScorer):
                     )
                 )
 
-        return scores
+        return cap_hits(scores)

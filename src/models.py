@@ -100,7 +100,8 @@ class CandidateChart(BaseModel):
     mc: float                 # degrees 0–360
     house_cusps: list[float]  # 12 cusps in degrees
     house_system: HouseSystem
-    planets: dict[str, float] = Field(default_factory=dict)  # name → longitude
+    planets: dict[str, float] = Field(default_factory=dict)           # name → ecliptic longitude
+    planet_latitudes: dict[str, float] = Field(default_factory=dict)  # name → ecliptic latitude
 
     @property
     def dsc(self) -> float:

@@ -119,12 +119,18 @@ def bayesian_update(
     candidate_scores: list[CandidateScore],
     prior: RisingSignPrior,
     candidates: list[CandidateChart],
+    temperature: float = 5.0,
 ) -> list[CandidateScore]:
     """
     Update posterior probabilities using the Morin prior and likelihood scores.
 
     P(time | events) ∝ P(time) × likelihood(time)
     where likelihood is derived from the normalized total scores.
+
+    temperature > 1.0 dampens the exponential sensitivity of the softmax so that
+    a few coincidental tight-orb hits don't produce a near-certainty posterior.
+    At temperature=1.0, one extra hit (score ≈ 4 pts) multiplies the likelihood
+    by e^4 ≈ 55×. At temperature=5.0, the same hit multiplies by e^0.8 ≈ 2.2×.
     """
     # Build prior vector aligned with candidate list
     prior_vec = np.array([
@@ -132,12 +138,11 @@ def bayesian_update(
         for c in candidates
     ])
 
-    # Likelihood: softmax of training scores
+    # Likelihood: temperature-scaled softmax of training scores
     training_scores = np.array([cs.training_score() for cs in candidate_scores])
     training_scores = np.clip(training_scores, 0, None)
 
-    # Exponentiate (temperature=1) and multiply by prior
-    exp_scores = np.exp(training_scores - training_scores.max())  # numerical stability
+    exp_scores = np.exp((training_scores - training_scores.max()) / temperature)
     posterior = prior_vec * exp_scores
     posterior /= posterior.sum() + 1e-12
 
@@ -382,6 +387,7 @@ class Rectifier:
                     house_cusps=chart["cusps"],
                     house_system=house_system,
                     planets=chart["planets"],
+                    planet_latitudes=chart["planet_latitudes"],
                 )
             )
 
