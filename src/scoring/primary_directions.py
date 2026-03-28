@@ -29,8 +29,11 @@ from ..models import CandidateChart, LifeEvent, TechniqueScore
 from .base import BaseScorer, orb_score
 from ..ephemeris import MOSHIER_FLAG
 
-# Primary directions: fully independent mathematical framework → highest weight
-TECHNIQUE_WEIGHT = 2.0
+# Primary directions: fully independent mathematical framework.
+# Weight reduced to 1.0 (from 2.0) because this implementation uses a simplified
+# RA approximation (ecliptic lat=0, no oblique ascension). A proper implementation
+# using OA + ascensional difference would warrant the full 2.0 weight.
+TECHNIQUE_WEIGHT = 1.0
 
 # Naibod arc key: degrees of RA per year
 NAIBOD_RATE = 0.9856  # degrees RA per year
