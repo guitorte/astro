@@ -10,7 +10,7 @@ everyone born in the same year and carry zero discriminating power.
 
 import swisseph as swe
 from ..models import CandidateChart, LifeEvent, TechniqueScore
-from .base import BaseScorer, angle_diff, orb_score, get_event_sensitive_points
+from .base import BaseScorer, angle_diff, orb_score, get_event_sensitive_points, cap_hits
 
 OUTER_PLANET_CODES: dict[str, int] = {
     "SATURN": swe.SATURN,
@@ -65,4 +65,4 @@ class TransitScorer(BaseScorer):
                             time_minutes=candidate.time_minutes,
                         )
                     )
-        return scores
+        return cap_hits(scores)

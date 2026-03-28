@@ -14,7 +14,7 @@ is applied so they don't count as fully independent witnesses.
 
 import swisseph as swe
 from ..models import CandidateChart, LifeEvent, TechniqueScore
-from .base import BaseScorer, angle_diff, orb_score, get_event_sensitive_points
+from .base import BaseScorer, angle_diff, orb_score, get_event_sensitive_points, cap_hits
 from ..ephemeris import secondary_progressed_jd, MOSHIER_FLAG
 
 # Partial correlation with solar arc → weight reduced to 1.5 (vs 2.0 for primaries)
@@ -105,7 +105,7 @@ class ProgressionScorer(BaseScorer):
                 )
                 break  # at most one ingress per event
 
-        # --- Progressed ASC/MC aspects to natal planets ---
+        # --- Progressed ASC/MC aspects to natal planets --- (continued)
         prog_asc_approx = (candidate.ascendant + age * 1.0) % 360  # rough arc
         prog_mc_approx = (candidate.mc + age * 1.0) % 360
 
@@ -129,4 +129,4 @@ class ProgressionScorer(BaseScorer):
                         )
                     )
 
-        return scores
+        return cap_hits(scores)

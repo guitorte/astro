@@ -14,7 +14,7 @@ don't double-count the same underlying signal.
 import swisseph as swe
 from datetime import date as date_type
 from ..models import CandidateChart, LifeEvent, TechniqueScore
-from .base import BaseScorer, angle_diff, orb_score, get_angles
+from .base import BaseScorer, angle_diff, orb_score, get_angles, cap_hits
 from ..ephemeris import solar_arc_for_age, MOSHIER_FLAG
 
 # Naibod mean rate (degrees per year) — used as fallback
@@ -98,4 +98,4 @@ class SolarArcScorer(BaseScorer):
                         )
                     )
 
-        return scores
+        return cap_hits(scores)

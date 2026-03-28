@@ -35,6 +35,9 @@ class EventType(str, Enum):
     EMIGRATION = "emigration"
     SURGERY = "surgery"
     BIRTH_OF_CHILD = "birth_of_child"
+    CUSTODY_LOSS = "custody_loss"          # losing custody of children
+    LEGAL_RESTRICTION = "legal_restriction" # conservatorship, guardianship by family
+    HOSPITALIZATION = "hospitalization"     # psychiatric or medical admission
     OTHER = "other"
 
 
@@ -55,7 +58,10 @@ EVENT_HOUSE_RULERSHIPS: dict[str, list[int]] = {
     "emigration": [9, 4],
     "surgery": [8, 12, 6],
     "birth_of_child": [5, 11],
-    "other": [1],
+    "custody_loss": [5, 4, 12],            # children (5), home/family (4), loss (12)
+    "legal_restriction": [4, 10, 12, 7],   # father/Saturn (4), legal authority (10), confinement (12)
+    "hospitalization": [12, 6, 1],         # hidden/institutions (12), health (6), body (1)
+    "other": [1, 4, 7, 10],               # test all four angles for unclassified events
 }
 
 
@@ -94,7 +100,8 @@ class CandidateChart(BaseModel):
     mc: float                 # degrees 0–360
     house_cusps: list[float]  # 12 cusps in degrees
     house_system: HouseSystem
-    planets: dict[str, float] = Field(default_factory=dict)  # name → longitude
+    planets: dict[str, float] = Field(default_factory=dict)           # name → ecliptic longitude
+    planet_latitudes: dict[str, float] = Field(default_factory=dict)  # name → ecliptic latitude
 
     @property
     def dsc(self) -> float:

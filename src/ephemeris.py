@@ -59,6 +59,19 @@ def calc_planet_positions(jd: float) -> dict[str, float]:
     return positions
 
 
+def calc_planet_latitudes(jd: float) -> dict[str, float]:
+    """
+    Calculate ecliptic latitudes for all 10 planets at given Julian Day.
+    Returns dict: planet_name → latitude (degrees, negative = south of ecliptic).
+    Latitudes are needed for accurate RA conversion in primary directions.
+    """
+    latitudes = {}
+    for name, code in PLANET_CODES.items():
+        result, _ = swe.calc_ut(jd, code, MOSHIER_FLAG)
+        latitudes[name] = result[1]  # index 1 = ecliptic latitude
+    return latitudes
+
+
 def calc_planet_speed(jd: float, planet_name: str) -> float:
     """Return daily motion (degrees/day) of a planet. Negative = retrograde."""
     code = PLANET_CODES[planet_name]
@@ -81,12 +94,14 @@ def calc_houses(jd: float, lat: float, lon: float,
 def calc_full_chart(jd: float, lat: float, lon: float,
                     house_system: HouseSystem) -> dict:
     """
-    Return a complete chart dict with planets, angles, and cusps.
+    Return a complete chart dict with planets, angles, cusps, and planetary latitudes.
     """
     planets = calc_planet_positions(jd)
+    planet_lats = calc_planet_latitudes(jd)
     cusps, asc, mc = calc_houses(jd, lat, lon, house_system)
     return {
         "planets": planets,
+        "planet_latitudes": planet_lats,
         "cusps": cusps,
         "asc": asc,
         "mc": mc,
@@ -140,6 +155,7 @@ def generate_candidate_grid(
                 house_cusps=chart["cusps"],
                 house_system=house_system,
                 planets=chart["planets"],
+                planet_latitudes=chart["planet_latitudes"],
             )
         )
     return candidates

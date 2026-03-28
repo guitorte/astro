@@ -35,6 +35,8 @@ CLEAR_MODE_RATIO = 3.0
 MIN_POSTERIOR_FOR_PRECISION = 0.40
 # Cross-validation: held-out hit rate must be ≥ this fraction of training rate
 CV_FLOOR = 0.80
+# Cross-validation: below this ratio, result is underdetermined — no specific time emitted
+CV_UNDERDETERMINED = 0.20
 # Event diversity: if any single type exceeds this fraction, warn of homogeneity bias
 MAX_TYPE_FRACTION = 0.60
 
@@ -50,16 +52,60 @@ def build_scorers(tight: bool = False) -> list:
     ]
 
 
+def cluster_events(
+    events: list[LifeEvent], window_days: int = 365
+) -> list[tuple[LifeEvent, float]]:
+    """
+    Group temporally-clustered events and apply a correlation penalty.
+
+    Events within `window_days` of each other are partially correlated —
+    they reflect the same underlying directional arc rather than independent
+    witnesses. The first event in each cluster scores at full weight; each
+    subsequent event in the same cluster scores at a reduced multiplier.
+
+    Returns list of (event, cluster_multiplier) pairs.
+
+    Calibration note (Britney Spears test): without clustering, the 2007-2008
+    breakdown → custody → conservatorship sequence (3 events in 12 months)
+    was triple-counted, creating a strong false attractor at Scorpio 04:47
+    even though the confirmed birth time is Libra 01:30.
+    """
+    if not events:
+        return []
+
+    sorted_events = sorted(events, key=lambda e: e.date)
+    result: list[tuple[LifeEvent, float]] = []
+    last_date: date_type | None = None
+
+    for event in sorted_events:
+        if last_date is None or (event.date - last_date).days > window_days:
+            # First in a new cluster — full weight
+            result.append((event, 1.0))
+        else:
+            # Within the rolling window of the previous event — half weight
+            result.append((event, 0.5))
+        last_date = event.date  # rolling: always advance to the most recent event
+
+    return result
+
+
 def score_candidate(
     candidate: CandidateChart,
     events: list[LifeEvent],
     natal_jd: float,
     scorers: list,
 ) -> CandidateScore:
-    """Apply all scorers to one candidate chart over all events."""
+    """Apply all scorers to one candidate chart over all events, with temporal clustering."""
+    clustered = cluster_events(events)
     all_scores: list[TechniqueScore] = []
     for scorer in scorers:
-        all_scores.extend(scorer.score_all_events(candidate, events, natal_jd))
+        for event, cluster_mult in clustered:
+            hits = scorer.score_event(candidate, event, natal_jd)
+            # Apply cluster penalty to each hit's score
+            for hit in hits:
+                if cluster_mult < 1.0:
+                    hit = hit.model_copy(update={"score": hit.score * cluster_mult})
+                all_scores.append(hit)
     total = sum(s.score for s in all_scores)
     return CandidateScore(
         time_minutes=candidate.time_minutes,
@@ -73,12 +119,18 @@ def bayesian_update(
     candidate_scores: list[CandidateScore],
     prior: RisingSignPrior,
     candidates: list[CandidateChart],
+    temperature: float = 5.0,
 ) -> list[CandidateScore]:
     """
     Update posterior probabilities using the Morin prior and likelihood scores.
 
     P(time | events) ∝ P(time) × likelihood(time)
     where likelihood is derived from the normalized total scores.
+
+    temperature > 1.0 dampens the exponential sensitivity of the softmax so that
+    a few coincidental tight-orb hits don't produce a near-certainty posterior.
+    At temperature=1.0, one extra hit (score ≈ 4 pts) multiplies the likelihood
+    by e^4 ≈ 55×. At temperature=5.0, the same hit multiplies by e^0.8 ≈ 2.2×.
     """
     # Build prior vector aligned with candidate list
     prior_vec = np.array([
@@ -86,12 +138,11 @@ def bayesian_update(
         for c in candidates
     ])
 
-    # Likelihood: softmax of training scores
+    # Likelihood: temperature-scaled softmax of training scores
     training_scores = np.array([cs.training_score() for cs in candidate_scores])
     training_scores = np.clip(training_scores, 0, None)
 
-    # Exponentiate (temperature=1) and multiply by prior
-    exp_scores = np.exp(training_scores - training_scores.max())  # numerical stability
+    exp_scores = np.exp((training_scores - training_scores.max()) / temperature)
     posterior = prior_vec * exp_scores
     posterior /= posterior.sum() + 1e-12
 
@@ -336,6 +387,7 @@ class Rectifier:
                     house_cusps=chart["cusps"],
                     house_system=house_system,
                     planets=chart["planets"],
+                    planet_latitudes=chart["planet_latitudes"],
                 )
             )
 
@@ -467,6 +519,14 @@ class Rectifier:
         # --- Loop 3 ---
         consensus, system_results = self.loop3_consensus_check(top2.time_minutes)
 
+        # Underdetermined: cross-validation is too poor to trust the specific time at all
+        if cv_score < CV_UNDERDETERMINED and len([e for e in self.events if e.held_out]) >= 1:
+            return self._underdetermined_result(
+                top_candidate_time=top2.time_minutes,
+                cv_score=cv_score,
+                consensus=consensus,
+            )
+
         # Determine if result is provisional
         is_provisional = (
             top2.posterior_probability < MIN_POSTERIOR_FOR_PRECISION
@@ -505,6 +565,31 @@ class Rectifier:
 
         self._log(f"\nResult: {result.summary()}")
         return result
+
+    def _underdetermined_result(
+        self, top_candidate_time: int, cv_score: float, consensus: int
+    ) -> RectificationResult:
+        """
+        Emitted when cross-validation is too poor to trust the winning candidate.
+        Returns a 720-minute (12-hour) uncertainty window rather than a specific time.
+        Honest behavior: better to report uncertainty than to output a wrong time.
+        """
+        h, m = divmod(top_candidate_time, 60)
+        return RectificationResult(
+            rectified_time_minutes=top_candidate_time,
+            uncertainty_minutes=720,
+            confidence_score=0.0,
+            house_system_consensus=consensus,
+            is_provisional=True,
+            evidence_ledger=[],
+            notes=(
+                f"UNDERDETERMINED: cross-validation ratio {cv_score:.2f} is below the "
+                f"minimum threshold {CV_UNDERDETERMINED}. The scoring engine found a "
+                f"candidate at {h:02d}:{m:02d} but held-out events do not confirm it. "
+                "The result is statistically unreliable. Add more diverse anchor events "
+                "or verify the held-out event dates."
+            ),
+        )
 
     def _empty_result(self, reason: str) -> RectificationResult:
         return RectificationResult(
