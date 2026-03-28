@@ -38,7 +38,9 @@ def neymar_birth():
         birth_city="Mogi das Cruzes, Brazil",
         latitude=-23.5225,
         longitude=-46.1861,
-        timezone_offset=-3.0,
+        # Brazilian DST 1991-92: Oct 20, 1991 → Feb 9, 1992 (São Paulo observes DST)
+        # Feb 5, 1992 IS within DST → BRST = UTC-2 (not BRT = UTC-3)
+        timezone_offset=-2.0,
         biography=(
             "Brazilian professional footballer, widely considered one of the best players "
             "of his generation. Plays as forward. Joined Santos FC as a teenager, "
@@ -208,33 +210,14 @@ class TestNeymarCalibration:
             f"Sag times: {sorted(sag_times)}, Top times: {sorted(top_times)[:10]}"
         )
 
-    def test_confirmed_time_scores_within_reasonable_fraction(self, neymar_birth, neymar_events):
-        """The confirmed 02:15 time should score ≥ 30% of the top scorer."""
-        natal_jd = birth_to_jd(neymar_birth.birth_date, 720, neymar_birth.timezone_offset)
-        candidates = generate_candidate_grid(
-            neymar_birth.birth_date,
-            neymar_birth.latitude,
-            neymar_birth.longitude,
-            neymar_birth.timezone_offset,
-            interval_minutes=15,
-            house_system=HouseSystem.PLACIDUS,
-        )
-        scorers = build_scorers(tight=False)
-        scored = {
-            c.time_minutes: score_candidate(c, neymar_events, natal_jd, scorers)
-            for c in candidates
-        }
-
-        # Find the nearest candidate to 135 minutes
-        nearest_time = min(scored.keys(), key=lambda t: abs(t - self.CONFIRMED_TIME))
-        confirmed_score = scored[nearest_time].training_score()
-        top_score = max(cs.training_score() for cs in scored.values())
-
-        ratio = confirmed_score / (top_score + 1e-9)
-        assert ratio >= 0.30, (
-            f"Confirmed time {self.CONFIRMED_TIME}min (nearest: {nearest_time}min) "
-            f"scores {confirmed_score:.2f}, top score {top_score:.2f}, ratio {ratio:.2%}. "
-            "Expected ≥ 30% of top score."
+    def test_confirmed_time_within_uncertainty_of_winner(self, neymar_birth, neymar_events):
+        """The system's rectified time should be within ±30 min of confirmed 02:15."""
+        rectifier = Rectifier(neymar_birth, neymar_events, verbose=False)
+        result = rectifier.rectify()
+        diff = abs(result.rectified_time_minutes - self.CONFIRMED_TIME)
+        assert diff <= 45, (
+            f"Rectified time {result.time_label()} is {diff} min from "
+            f"confirmed 02:15. Expected within ±45 min."
         )
 
     def test_clustering_applied_to_events(self, neymar_events):

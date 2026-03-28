@@ -45,7 +45,7 @@ class ProgressionScorer(BaseScorer):
 
         scores: list[TechniqueScore] = []
 
-        # Derive birth date from natal_jd (reverse engineering)
+        # Derive birth date from natal_jd (day-level precision)
         birth_parts = swe.revjul(natal_jd)
         birth_date = date_type(birth_parts[0], birth_parts[1], int(birth_parts[2]))
 
@@ -53,7 +53,13 @@ class ProgressionScorer(BaseScorer):
         if age <= 0:
             return scores
 
-        prog_jd = secondary_progressed_jd(natal_jd, age)
+        # CRITICAL: Use the candidate's actual birth JD, not the noon reference JD.
+        # "One day after birth = one year of life" requires the exact birth moment.
+        # Using noon (natal_jd) instead of the actual birth time shifts the progressed
+        # Moon by ~5° for a birth near midnight — catastrophic for 2° orb scoring,
+        # and it makes the progressed Moon identical across all candidates, destroying
+        # the Moon's discriminating power (which is the strongest timing signal).
+        prog_jd = secondary_progressed_jd(candidate.julian_day, age)
 
         # --- Progressed Moon aspects to natal sensitive points ---
         prog_moon, _ = swe.calc_ut(prog_jd, swe.MOON, MOSHIER_FLAG)
