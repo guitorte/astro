@@ -20,22 +20,30 @@ from .models import RisingSignPrior, SIGN_NAMES
 # Keyword patterns → house emphases → probable rising signs
 # Maps life-theme keywords to likely house emphases
 THEME_HOUSE_MAP: dict[str, list[int]] = {
-    # 1st house themes (self, body, identity, sports body)
+    # 1st house themes (self, body, identity)
     r"\b(athlete|sportsman|sportswoman|physical|body|health|fitness|boxer|wrestler|martial art)\b": [1],
     # 3rd house (communication, writing, siblings)
     r"\b(journalist|writer|author|blogger|communicat|sibling)\b": [3],
     # 4th house (home, family, roots)
     r"\b(real estate|family|roots|ancestr|homeland|domestic)\b": [4],
     # 5th house (creativity, children, romance, entertainment, sport-as-play)
-    r"\b(actor|actress|entertainer|performer|artist|creative|child|romance|gambl|football|soccer|basketball|tennis|golf|sport|player|dribbl|goal|scorer|prodigy|competition|game)\b": [5, 9],
+    # Exact-boundary terms:
+    r"\b(actor|actress|entertainer|performer|artist|creative|child|romance|gambl|dribbl|goal|scorer|prodigy|competition|game)\b": [5, 9],
+    # Sports prefix terms (no trailing \b so they match "footballer", "players", "basketball"):
+    r"\b(footbal|soccer|basketbal|tennis|golf|sport|player|cricket)": [5, 9],
     # 6th house (work, health, service)
     r"\b(doctor|nurse|healer|service|employee|daily work|health worker)\b": [6],
     # 7th house (partnerships, law, public)
     r"\b(lawyer|attorney|partner|diplomat|marriage|public relations)\b": [7],
     # 8th house (transformation, death, finance, occult)
-    r"\b(occult|transform|crisis|death|inheritance|banker|financ|psycholog|record fee|world record)\b": [8],
-    # 9th house (philosophy, law, religion, travel, academia, international sport)
-    r"\b(philosopher|professor|academic|university|religion|spiritual|travel|foreign|international|publish|transfer|abroad|world cup|national team|global|tour)\b": [9],
+    # "record fee" is kept here but also included in 9th (sports transfers are international)
+    r"\b(occult|transform|crisis|death|inheritance|banker|financ|psycholog)\b": [8],
+    r"\b(record fee|world record)\b": [8, 9],  # big transfers = 8th (money) + 9th (international)
+    # 9th house (philosophy, religion, international travel, academia, foreign sport)
+    # Exact-boundary terms:
+    r"\b(philosopher|professor|academic|university|religion|spiritual|foreign|international|publish|abroad|national team|global|tour|copa)\b": [9],
+    # Prefix terms for inflected forms (transferred, travels, world cups):
+    r"\b(travel|transfer|world cup)": [9],
     # 10th house (career, authority, public fame)
     r"\b(politic|president|prime minister|ceo|director|executive|famous|celebrity|public figure|authority|career peak|best in the world|iconic)\b": [10],
     # 11th house (groups, causes, networks, team sports)
