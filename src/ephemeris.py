@@ -210,3 +210,55 @@ def sign_ruler(longitude: float) -> str:
     ]
     sign_idx = int(longitude / 30) % 12
     return rulers[sign_idx]
+
+
+def validate_timezone(
+    birth_date: date,
+    latitude: float,
+    longitude: float,
+    provided_offset: float,
+) -> str | None:
+    """
+    Warn if the provided UTC offset differs from what zoneinfo reports for the
+    given location and date. Returns a warning string or None if offset looks correct.
+
+    Uses Python's `zoneinfo` (stdlib since 3.9) + `timezonefinder` if available.
+    Falls back to a longitude-based approximation (+1hr per 15° east) if the package
+    is not installed.
+
+    This is advisory only — historical timezone changes (DST, political shifts) mean
+    the correct historical offset may differ from what modern databases report.
+    """
+    try:
+        from timezonefinder import TimezoneFinder  # type: ignore
+        from zoneinfo import ZoneInfo
+        from datetime import datetime as dt
+
+        tf = TimezoneFinder()
+        tz_name = tf.timezone_at(lat=latitude, lng=longitude)
+        if tz_name:
+            tz = ZoneInfo(tz_name)
+            dt_naive = dt(birth_date.year, birth_date.month, birth_date.day, 12, 0, 0)
+            dt_aware = dt_naive.replace(tzinfo=tz)
+            utc_offset_hours = dt_aware.utcoffset().total_seconds() / 3600  # type: ignore
+            diff = abs(utc_offset_hours - provided_offset)
+            if diff >= 0.5:
+                return (
+                    f"Timezone warning: provided offset {provided_offset:+.1f}h, "
+                    f"but {tz_name} on {birth_date} is UTC{utc_offset_hours:+.1f}. "
+                    f"Difference: {diff:.1f}h. Verify DST and historical timezone rules."
+                )
+    except ImportError:
+        # timezonefinder not installed — use longitude approximation
+        approx_offset = round(longitude / 15)
+        diff = abs(approx_offset - provided_offset)
+        if diff >= 2:
+            return (
+                f"Timezone warning: provided offset {provided_offset:+.1f}h, "
+                f"but longitude {longitude:.1f}° suggests ~UTC{approx_offset:+d}. "
+                f"Install 'timezonefinder' for accurate DST-aware validation."
+            )
+    except Exception:
+        pass  # Don't let validation errors break the main workflow
+
+    return None

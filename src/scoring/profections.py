@@ -18,10 +18,10 @@ from ..models import CandidateChart, LifeEvent, TechniqueScore
 from .base import BaseScorer, angle_diff, orb_score, cap_hits
 from ..ephemeris import profected_asc, sign_ruler, MOSHIER_FLAG
 
-# Profections have low birth-time discrimination: the profected sign changes only
-# every ~2 hours, so candidates within that window score equally on lord activation.
-# Weight reduced to 0.5 to limit noise contribution to the total score.
-TECHNIQUE_WEIGHT = 0.5
+# DISABLED: Profected sign changes every ~2 hours — zero minute-level discrimination.
+# Candidates within a 2-hour window score identically on lord activation.
+# Disabled in the "Rifle, Not Shotgun" methodology revision.
+TECHNIQUE_WEIGHT = 0.0
 
 
 class ProfectionScorer(BaseScorer):
@@ -49,6 +49,10 @@ class ProfectionScorer(BaseScorer):
         event: LifeEvent,
         natal_jd: float,
     ) -> list[TechniqueScore]:
+        # Short-circuit: technique disabled (weight=0.0)
+        if TECHNIQUE_WEIGHT == 0.0:
+            return []
+
         scores: list[TechniqueScore] = []
 
         birth_parts = swe.revjul(natal_jd)

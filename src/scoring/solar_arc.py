@@ -1,14 +1,13 @@
 """
-Technique 3: Solar arc directions.
+Technique 3: Solar arc directions — DISABLED.
 
-Every point in the natal chart is advanced by the same arc (the arc
-the progressed Sun has moved since birth). The rate is ~0.9856°/year (Naibod key).
-Angular hits — directed planet reaching within orb of natal ASC/MC — are the
-primary signal.
+Solar arc sensitivity to birth time is ~0.04°/hour (negligible). The Sun's
+position at birth changes by only ~1° per day in ephemeris time, so a 1-hour
+birth-time shift moves the solar arc by ~0.04°. All discrimination comes from
+natal angles, making this redundant with transits-to-angles (which measure the
+same geometric relationship more directly).
 
-Correlation penalty applied: solar arc and secondary progressions share the
-progressed Sun arc as their basis. Their combined weight is capped so they
-don't double-count the same underlying signal.
+Disabled in the "Rifle, Not Shotgun" methodology revision.
 """
 
 import swisseph as swe
@@ -20,8 +19,9 @@ from ..ephemeris import solar_arc_for_age, MOSHIER_FLAG
 # Naibod mean rate (degrees per year) — used as fallback
 NAIBOD_RATE = 0.9856
 
-# Correlation penalty with progressions: cap at 1.2
-TECHNIQUE_WEIGHT = 1.2
+# DISABLED: solar arc has negligible birth-time sensitivity (~0.04°/hour).
+# All discrimination comes from natal angles, redundant with transits.
+TECHNIQUE_WEIGHT = 0.0
 
 
 class SolarArcScorer(BaseScorer):
@@ -42,6 +42,10 @@ class SolarArcScorer(BaseScorer):
         event: LifeEvent,
         natal_jd: float,
     ) -> list[TechniqueScore]:
+        # Short-circuit: technique disabled (weight=0.0)
+        if TECHNIQUE_WEIGHT == 0.0:
+            return []
+
         scores: list[TechniqueScore] = []
 
         birth_parts = swe.revjul(natal_jd)

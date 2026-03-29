@@ -24,6 +24,7 @@ from .scoring import (
     TransitScorer, ProgressionScorer, SolarArcScorer,
     ProfectionScorer, PrimaryDirectionScorer,
 )
+from .scoring.base import null_hypothesis_score
 from .morin_filter import build_morin_prior, uniform_prior
 
 
@@ -42,13 +43,24 @@ MAX_TYPE_FRACTION = 0.60
 
 
 def build_scorers(tight: bool = False) -> list:
-    """Return all 5 scoring technique instances in weighted order."""
+    """
+    Return active scoring technique instances.
+
+    "Rifle, Not Shotgun" methodology (3 active techniques):
+      - ProgressionScorer  weight 3.0 — progressed Moon, strongest birth-time discriminator
+      - TransitScorer      weight 2.0 — outer planets to angles, birth-time-sensitive via angles
+      - PrimaryDirectionScorer weight 1.0 — OA-based directions, confirmation technique
+
+    Disabled (weight 0.0, return empty lists):
+      - SolarArcScorer   — negligible birth-time sensitivity (~0.04°/hour)
+      - ProfectionScorer — sign changes every ~2 hours, zero minute-level discrimination
+    """
     return [
-        PrimaryDirectionScorer(tight=tight),   # weight 2.0 — most independent
-        ProgressionScorer(tight=tight),         # weight 1.5 — progressed Moon
-        SolarArcScorer(tight=tight),            # weight 1.2 — correlated with above
-        ProfectionScorer(),                     # weight 1.0 — different time scale
-        TransitScorer(tight=tight),             # weight 1.0 — real-time positions
+        ProgressionScorer(tight=tight),         # weight 3.0 — strongest discriminator
+        TransitScorer(tight=tight),             # weight 2.0 — angles only, conj+opp
+        PrimaryDirectionScorer(tight=tight),    # weight 1.0 — OA-based confirmation
+        SolarArcScorer(tight=tight),            # weight 0.0 — DISABLED
+        ProfectionScorer(),                     # weight 0.0 — DISABLED
     ]
 
 
@@ -107,11 +119,21 @@ def score_candidate(
                     hit = hit.model_copy(update={"score": hit.score * cluster_mult})
                 all_scores.append(hit)
     total = sum(s.score for s in all_scores)
+
+    # Count how many distinct anchor events have at least one technique hit.
+    # A candidate that explains 4/5 events modestly is stronger than one that
+    # explains 1 event with 12 hits while missing the rest.
+    hit_event_count = len({
+        s.event_description for s in all_scores
+        if s.score > 0 and not s.held_out
+    })
+
     return CandidateScore(
         time_minutes=candidate.time_minutes,
         total_score=total,
         technique_scores=all_scores,
         posterior_probability=0.0,
+        hit_event_count=hit_event_count,
     )
 
 
@@ -120,6 +142,8 @@ def bayesian_update(
     prior: RisingSignPrior,
     candidates: list[CandidateChart],
     temperature: float = 5.0,
+    null_baseline: float = 0.0,
+    n_anchor_events: int = 1,
 ) -> list[CandidateScore]:
     """
     Update posterior probabilities using the Morin prior and likelihood scores.
@@ -127,10 +151,16 @@ def bayesian_update(
     P(time | events) ∝ P(time) × likelihood(time)
     where likelihood is derived from the normalized total scores.
 
-    temperature > 1.0 dampens the exponential sensitivity of the softmax so that
-    a few coincidental tight-orb hits don't produce a near-certainty posterior.
-    At temperature=1.0, one extra hit (score ≈ 4 pts) multiplies the likelihood
-    by e^4 ≈ 55×. At temperature=5.0, the same hit multiplies by e^0.8 ≈ 2.2×.
+    null_baseline: median score of a random chart (from null_hypothesis_score()).
+        Scores at or below this receive no Bayesian boost — only candidates that
+        beat the random baseline are meaningfully elevated.
+
+    n_anchor_events: number of non-held-out events. Used to scale hit_event_count
+        into a coverage fraction [0, 1], penalising candidates that score high
+        on few events while missing others.
+
+    temperature > 1.0 dampens exponential sensitivity so that coincidental tight-orb
+    hits don't produce near-certainty posterior.
     """
     # Build prior vector aligned with candidate list
     prior_vec = np.array([
@@ -138,11 +168,20 @@ def bayesian_update(
         for c in candidates
     ])
 
-    # Likelihood: temperature-scaled softmax of training scores
-    training_scores = np.array([cs.training_score() for cs in candidate_scores])
-    training_scores = np.clip(training_scores, 0, None)
+    # Training scores adjusted for null baseline.
+    # Subtract the median random-chart score so that only candidates that
+    # outperform random chance receive a posterior boost.
+    raw_scores = np.array([cs.training_score() for cs in candidate_scores])
+    adjusted = np.clip(raw_scores - null_baseline, 0, None)
 
-    exp_scores = np.exp((training_scores - training_scores.max()) / temperature)
+    # Event-coverage is stored on CandidateScore for display/debugging but is
+    # NOT applied as a multiplier here. Multiplicative coverage penalises candidates
+    # that have a few very tight hits on some events over candidates with loose
+    # hits on many events — which is the wrong direction for precision rectification.
+    # Use adjusted scores directly for the likelihood.
+    blended = adjusted
+
+    exp_scores = np.exp((blended - blended.max()) / temperature)
     posterior = prior_vec * exp_scores
     posterior /= posterior.sum() + 1e-12
 
@@ -334,7 +373,22 @@ class Rectifier:
             for c in candidates
         ]
 
-        candidate_scores = bayesian_update(candidate_scores, self.prior, candidates)
+        n_anchor = len([e for e in self.events if not e.held_out])
+        null_baseline = null_hypothesis_score(
+            events=self.events,
+            natal_jd=self.natal_jd,
+            scorers=scorers,
+            birth_date=self.birth_data.birth_date,
+            latitude=self.birth_data.latitude,
+            longitude=self.birth_data.longitude,
+            tz_offset=self.birth_data.timezone_offset,
+        )
+        self._log(f"  Null baseline score: {null_baseline:.2f}")
+
+        candidate_scores = bayesian_update(
+            candidate_scores, self.prior, candidates,
+            null_baseline=null_baseline, n_anchor_events=n_anchor,
+        )
         candidate_scores.sort(key=lambda cs: cs.posterior_probability, reverse=True)
 
         if candidate_scores:
@@ -398,7 +452,20 @@ class Rectifier:
             for c in candidates
         ]
 
-        candidate_scores = bayesian_update(candidate_scores, self.prior, candidates)
+        n_anchor = len([e for e in self.events if not e.held_out])
+        null_baseline = null_hypothesis_score(
+            events=self.events,
+            natal_jd=self.natal_jd,
+            scorers=scorers,
+            birth_date=self.birth_data.birth_date,
+            latitude=self.birth_data.latitude,
+            longitude=self.birth_data.longitude,
+            tz_offset=self.birth_data.timezone_offset,
+        )
+        candidate_scores = bayesian_update(
+            candidate_scores, self.prior, candidates,
+            null_baseline=null_baseline, n_anchor_events=n_anchor,
+        )
         candidate_scores.sort(key=lambda cs: cs.posterior_probability, reverse=True)
 
         if candidate_scores:

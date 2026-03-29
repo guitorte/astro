@@ -138,6 +138,7 @@ class CandidateScore(BaseModel):
     total_score: float
     technique_scores: list[TechniqueScore]
     posterior_probability: float = 0.0
+    hit_event_count: int = 0  # number of distinct anchor events with at least one technique hit
 
     def training_score(self) -> float:
         return sum(s.score for s in self.technique_scores if not s.held_out)

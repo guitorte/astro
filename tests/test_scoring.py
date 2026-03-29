@@ -12,7 +12,7 @@ from src.scoring.transits import TransitScorer
 from src.scoring.progressions import ProgressionScorer
 from src.scoring.solar_arc import SolarArcScorer
 from src.scoring.profections import ProfectionScorer
-from src.scoring.primary_directions import PrimaryDirectionScorer, ecliptic_to_ra
+from src.scoring.primary_directions import PrimaryDirectionScorer, ecliptic_to_equatorial
 
 
 # --- Fixtures ---
@@ -233,13 +233,14 @@ class TestProfectionScorer:
 # --- Primary direction scorer ---
 
 class TestPrimaryDirectionScorer:
-    def test_ecliptic_to_ra_range(self):
-        ra = ecliptic_to_ra(90.0, 0.0, 23.45)  # Cancer ingress
+    def test_ecliptic_to_equatorial_range(self):
+        ra, dec = ecliptic_to_equatorial(90.0, 0.0, 23.45)  # Cancer ingress
         assert 0 <= ra < 360
+        assert -90 <= dec <= 90
 
-    def test_ecliptic_to_ra_aries(self):
+    def test_ecliptic_to_equatorial_aries(self):
         # Aries 0° should convert to RA ~0° (along ecliptic)
-        ra = ecliptic_to_ra(0.0, 0.0, 23.45)
+        ra, dec = ecliptic_to_equatorial(0.0, 0.0, 23.45)
         assert abs(ra) < 5 or abs(ra - 360) < 5
 
     def test_returns_list(self, sample_candidate, marriage_event, natal_jd):

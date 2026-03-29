@@ -1,7 +1,8 @@
 """Base scorer and shared scoring utilities."""
 
 from abc import ABC, abstractmethod
-from ..models import CandidateChart, LifeEvent, TechniqueScore, EVENT_HOUSE_RULERSHIPS
+from datetime import date as date_type
+from ..models import CandidateChart, LifeEvent, TechniqueScore, EVENT_HOUSE_RULERSHIPS, HouseSystem
 
 # Orb within which a house cusp is considered the same point as an angle
 _CUSP_ANGLE_DEDUP_ORB = 2.0
@@ -93,6 +94,71 @@ def cap_hits(hits: list[TechniqueScore], max_hits: int = MAX_HITS_PER_EVENT) -> 
     if len(hits) <= max_hits:
         return hits
     return sorted(hits, key=lambda h: h.score, reverse=True)[:max_hits]
+
+
+def null_hypothesis_score(
+    events: list[LifeEvent],
+    natal_jd: float,
+    scorers: list,
+    birth_date: date_type,
+    latitude: float,
+    longitude: float,
+    tz_offset: float,
+    n_random: int = 50,
+) -> float:
+    """
+    Compute the expected (null-hypothesis) score for a randomly-chosen birth time.
+
+    Generates `n_random` uniformly-spaced candidate charts across the full day,
+    scores each with the provided scorers, and returns the **median** total training
+    score. This represents how many points a random chart would accumulate by chance.
+
+    Use this to adjust Bayesian likelihoods: subtract the null score from each
+    candidate's training score before exponentiating, so only candidates that exceed
+    the random baseline receive a meaningful posterior boost.
+
+    Args:
+        events: Life events to score against (same set used in rectification).
+        natal_jd: Reference Julian Day (noon on birth date) for scorers that need it.
+        scorers: Active scorer instances (same list used in rectification).
+        birth_date: Birth date for chart generation.
+        latitude, longitude: Geographic coordinates.
+        tz_offset: Timezone offset in hours (historical).
+        n_random: Number of uniformly-spaced sample times (default 50).
+
+    Returns:
+        Median total training score across the random sample.
+    """
+    import numpy as np
+    from ..ephemeris import birth_to_jd, calc_full_chart
+
+    step = 1440 // n_random
+    scores = []
+
+    for i in range(n_random):
+        t = i * step  # minutes from midnight, 0 to ~1410
+        jd = birth_to_jd(birth_date, t, tz_offset)
+        chart = calc_full_chart(jd, latitude, longitude, HouseSystem.PLACIDUS)
+        candidate = CandidateChart(
+            time_minutes=t,
+            julian_day=jd,
+            ascendant=chart["asc"],
+            mc=chart["mc"],
+            house_cusps=chart["cusps"],
+            house_system=HouseSystem.PLACIDUS,
+            planets=chart["planets"],
+            planet_latitudes=chart.get("planet_latitudes", {}),
+        )
+
+        total = 0.0
+        for scorer in scorers:
+            for event in events:
+                if not event.held_out:
+                    hits = scorer.score_event(candidate, event, natal_jd)
+                    total += sum(h.score for h in hits)
+        scores.append(total)
+
+    return float(np.median(scores))
 
 
 class BaseScorer(ABC):
