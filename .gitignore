@@ -6,3 +6,6 @@ __pycache__/
 dist/
 build/
 .env
+
+# tiktok scraper local data — videos, transcripts, raw API dumps
+tiktok/data/
