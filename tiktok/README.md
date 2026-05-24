@@ -23,9 +23,13 @@ If you'd rather have the planning artifacts in PT-BR, say so and they will be tr
 
 - **astro-red-team** — adversarial review of a hypothesis, finding, or positioning concept. Use it before locking any decision.
 - **astro-comment-analyzer** — turn a raw paste of PT-BR TikTok comments into a structured demand-signal table.
-- **astro-content-coder** — code one video against the `03_videos.csv` schema, consistently, so coding doesn't drift across 200 rows.
+- **astro-content-coder** — code one video against the `03_videos.csv` schema, consistently, so coding doesn't drift across 200 rows. Used interactively when you want to code a single video by hand-with-help.
 
 Invoke them by asking Claude Code, for example: "Use the astro-red-team agent on `tiktok/05_positioning.md`."
+
+## Pipeline de coleta (`tiktok/scraper/`)
+
+Pipeline Python que automatiza descoberta de contas, scraping de metadados, download de vídeos, transcrição (faster-whisper) e classificação (Claude API) contra `SCHEMA.md`. Saídas alimentam diretamente `02_accounts.csv` e `03_videos.csv`. Não substitui codificação manual de calibração — ver `tiktok/scraper/README.md` para o protocolo de calibração obrigatório antes de escalar.
 
 ## Kill criteria
 
