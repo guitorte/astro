@@ -1,52 +1,80 @@
-"""LLM-based classification of a TikTok video against tiktok/SCHEMA.md.
+"""Local LLM classification of a TikTok video against tiktok/SCHEMA.md.
 
-Sends transcript + caption + metadata to Claude. Returns a dict whose
-keys map to qualitative columns of 03_videos.csv. The system prompt
-mirrors .claude/agents/astro-content-coder.md but is duplicated here
-because that file is read by the Claude Code Agent tool, not by this
-pipeline script.
+Uses Ollama (https://ollama.com) running locally — no API key, no
+network cost. Default model: qwen2.5:7b (balanced quality/hardware).
+Swap via the OLLAMA_MODEL env var.
+
+Hardware notes:
+- 7b   ~5 GB  — runs on CPU (slow) or any modern GPU
+- 14b  ~10 GB — needs ≥ 12 GB VRAM or fast CPU
+- 32b  ~20 GB — needs ≥ 24 GB VRAM
 
 CALIBRATION REQUIRED: before running on all 200 videos, manually code 20
-videos, run them through this classifier, and compare. If hook_type or
-sub_niche agreement is below 80%, tighten the prompt before scaling.
+videos, run them through this classifier, and compare. With a 7b model,
+expect 5-15% lower agreement with manual coding than a frontier API
+model — adjust the calibration threshold accordingly (target 70-80%
+agreement on hook_type and sub_niche instead of 80% strict).
 """
 from __future__ import annotations
 
 import json
-import os
 from dataclasses import dataclass
-from typing import Optional
+from typing import Any, Optional
 
-from anthropic import Anthropic
+import ollama
 
 from . import config
 
-SYSTEM_PROMPT = """Você codifica vídeos de TikTok de astrologia em PT-BR contra o schema definido em tiktok/SCHEMA.md. Aplique o schema de forma CONSISTENTE entre vídeos — drift de codificação é o que arruína a análise.
+SYSTEM_PROMPT = """Você codifica vídeos de TikTok de astrologia em PT-BR contra um schema fixo. Aplique o schema de forma CONSISTENTE entre vídeos — drift de codificação arruína a análise.
 
 Recebe: transcrição PT-BR + legenda + metadados (views, likes, duração).
-Retorna: JSON com EXATAMENTE estas chaves, sem prosa adicional:
+Retorna: JSON estritamente conforme o schema fornecido, sem prosa adicional.
 
-{
-  "hook_type": "question|hot_take|claim|story|list|demo|pattern_interrupt",
-  "first_15s_topic": "<descrição curta em PT-BR do que é estabelecido nos primeiros 15s>",
-  "format": "talking_head|text_only|b_roll|mixed",
-  "sub_niche": "western_general|vedic|hellenistic|signs|ascendant|synastry|transits|houses|mundane|astro_psych|mixed",
-  "specificity": "generic|specific|hyper_specific",
-  "cta_type": "none|follow|comment|save|link_bio|dm",
-  "has_text_overlay": "yes|no|unknown",
-  "has_voiceover": "yes|no|unknown",
-  "notes": "<sentença curta justificando qualquer decisão limítrofe; vazio se não aplicável>"
-}
-
-Regras:
-- hook_type: decidido pelo elemento dominante nos primeiros 1.5s. Se incerto, escolha um e mencione a alternativa em notes.
+Regras de codificação:
+- hook_type: elemento dominante nos primeiros 1.5s. Se incerto, escolha um e mencione a alternativa em notes.
 - format: 'mixed' só se nenhum formato domina ≥ 60% da duração.
-- sub_niche: deve estar na lista. Se um novo sub-niche parece se encaixar, NÃO invente — coloque 'mixed' e flag em notes.
+- sub_niche: deve estar na enum. Se um sub-niche novo parece encaixar, use 'mixed' e flag em notes.
 - specificity: 'generic' (todos os signos), 'specific' (uma dimensão), 'hyper_specific' (duas+ dimensões).
 - has_text_overlay e has_voiceover: 'unknown' quando a transcrição sozinha não permite decidir.
-- Se faltar informação para algum campo, marque 'unknown' (ou 'mixed' onde 'unknown' não está na enum) e descreva em notes.
+- Se faltar informação para algum campo categórico, escolha o valor mais conservador e explique em notes."""
 
-Retorne APENAS o JSON. Sem markdown, sem explicação."""
+
+RESPONSE_SCHEMA: dict[str, Any] = {
+    "type": "object",
+    "properties": {
+        "hook_type": {
+            "type": "string",
+            "enum": ["question", "hot_take", "claim", "story", "list", "demo", "pattern_interrupt"],
+        },
+        "first_15s_topic": {"type": "string"},
+        "format": {
+            "type": "string",
+            "enum": ["talking_head", "text_only", "b_roll", "mixed"],
+        },
+        "sub_niche": {
+            "type": "string",
+            "enum": [
+                "western_general", "vedic", "hellenistic", "signs", "ascendant",
+                "synastry", "transits", "houses", "mundane", "astro_psych", "mixed",
+            ],
+        },
+        "specificity": {
+            "type": "string",
+            "enum": ["generic", "specific", "hyper_specific"],
+        },
+        "cta_type": {
+            "type": "string",
+            "enum": ["none", "follow", "comment", "save", "link_bio", "dm"],
+        },
+        "has_text_overlay": {"type": "string", "enum": ["yes", "no", "unknown"]},
+        "has_voiceover": {"type": "string", "enum": ["yes", "no", "unknown"]},
+        "notes": {"type": "string"},
+    },
+    "required": [
+        "hook_type", "first_15s_topic", "format", "sub_niche",
+        "specificity", "cta_type", "has_text_overlay", "has_voiceover", "notes",
+    ],
+}
 
 
 @dataclass
@@ -59,12 +87,6 @@ class ClassifyInput:
 
 
 def classify(inp: ClassifyInput, model: str | None = None) -> dict:
-    if not os.environ.get("ANTHROPIC_API_KEY"):
-        raise RuntimeError(
-            "ANTHROPIC_API_KEY not set. Classification requires the Claude API."
-        )
-
-    client = Anthropic()
     user_msg = (
         f"Transcrição PT-BR:\n{inp.transcript}\n\n"
         f"Legenda: {inp.caption or '(sem legenda)'}\n"
@@ -73,15 +95,22 @@ def classify(inp: ClassifyInput, model: str | None = None) -> dict:
         f"Likes: {inp.likes or '?'}\n"
     )
 
-    response = client.messages.create(
-        model=model or config.CLASSIFIER_MODEL,
-        max_tokens=600,
-        system=SYSTEM_PROMPT,
-        messages=[{"role": "user", "content": user_msg}],
-    )
-    text = response.content[0].text.strip()
-    if text.startswith("```"):
-        text = text.removeprefix("```json").removeprefix("```").strip()
-        if text.endswith("```"):
-            text = text[:-3].strip()
+    client = ollama.Client(host=config.OLLAMA_HOST)
+    try:
+        response = client.chat(
+            model=model or config.OLLAMA_MODEL,
+            messages=[
+                {"role": "system", "content": SYSTEM_PROMPT},
+                {"role": "user", "content": user_msg},
+            ],
+            format=RESPONSE_SCHEMA,
+            options={"temperature": 0.1, "num_ctx": 8192},
+        )
+    except ConnectionError as e:
+        raise RuntimeError(
+            f"Cannot reach Ollama at {config.OLLAMA_HOST}. Is `ollama serve` running? "
+            f"Original error: {e}"
+        ) from e
+
+    text = response["message"]["content"].strip()
     return json.loads(text)

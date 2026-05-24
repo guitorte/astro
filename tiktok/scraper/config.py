@@ -26,7 +26,8 @@ WHISPER_MODEL = os.environ.get("WHISPER_MODEL", "medium")
 WHISPER_LANGUAGE = "pt"
 WHISPER_DEVICE = os.environ.get("WHISPER_DEVICE", "auto")
 
-CLASSIFIER_MODEL = os.environ.get("CLASSIFIER_MODEL", "claude-sonnet-4-6")
+OLLAMA_HOST = os.environ.get("OLLAMA_HOST", "http://localhost:11434")
+OLLAMA_MODEL = os.environ.get("OLLAMA_MODEL", "qwen2.5:7b")
 
 YTDLP_BASE_OPTS: dict = {
     "quiet": True,
