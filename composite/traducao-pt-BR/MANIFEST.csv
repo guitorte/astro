@@ -18,7 +18,7 @@ block_id,status,src_start_line,src_end_line,word_count,primary_title,session_by,
 017,done,998,1063,1728,Sixth House,exemplar-referencia-opus,blocos/017.md,EXEMPLAR de referencia.
 018,done,1064,1141,1914,Twelfth House,exemplar-referencia-opus,blocos/018.md,EXEMPLAR de referencia.
 019,done,1142,1223,1789,Conjunct Mars,claude-code-haiku,blocos/019.md,
-020,pending,1224,1295,1858,Trine Jupiter,,blocos/020.md,
+020,done,1224,1295,1858,Trine Jupiter,claude-code-haiku,blocos/020.md,
 021,pending,1296,1373,1854,Sextile Uranus,,blocos/021.md,
 022,pending,1374,1449,1848,Opposition Neptune,,blocos/022.md,
 023,pending,1450,1531,1845,Sextile Ascendant,,blocos/023.md,
