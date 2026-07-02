@@ -13,7 +13,7 @@ block_id,status,src_start_line,src_end_line,word_count,primary_title,session_by,
 012,done,738,799,2491,Case Five: Freud and Jung,haiku-session,blocos/012.md,
 013,done,800,855,1953,Chapter Four: Houses,haiku-session,blocos/013.md,
 014,done,856,917,1782,Sixth House,claude-code-haiku,blocos/014.md,
-015,pending,918,925,326,The Composite Ascendant,,blocos/015.md,
+015,done,918,925,326,The Composite Ascendant,claude-code-haiku,blocos/015.md,
 016,done,926,997,1860,Chapter Five: Sun,exemplar-referencia-opus,blocos/016.md,EXEMPLAR. 5a casa: fragmento 'affect others' remontado (OCR).
 017,done,998,1063,1728,Sixth House,exemplar-referencia-opus,blocos/017.md,EXEMPLAR de referencia.
 018,done,1064,1141,1914,Twelfth House,exemplar-referencia-opus,blocos/018.md,EXEMPLAR de referencia.
