@@ -2,7 +2,7 @@ block_id,status,src_start_line,src_end_line,word_count,primary_title,session_by,
 001,done,1,34,194,Planets in Composite,exemplar-referencia-opus,blocos/001.md,EXEMPLAR de referencia.
 002,done,35,76,736,Contents,exemplar-referencia-opus,blocos/002.md,EXEMPLAR de referencia.
 003,done,77,128,1983,Introduction,exemplar-referencia-opus,blocos/003.md,EXEMPLAR de referencia.
-004,pending,129,285,2505,Chapter One: Casting the Chart,,blocos/004.md,
+004,done,129,285,2505,Chapter One: Casting the Chart,haiku-session,blocos/004.md,
 005,pending,286,363,1765,Multiple Composites,,blocos/005.md,
 006,pending,364,471,1743,The Vertex,,blocos/006.md,
 007,pending,472,549,2799,Chapter Two: Reading the Chart,,blocos/007.md,
