@@ -17,7 +17,8 @@ A estratégia para garantir qualidade apesar de muitas sessões independentes:
 ## Estrutura de pastas
 ```
 traducao-pt-BR/
-├── README.md               ← este arquivo (protocolo)
+├── CLAUDE.md               ← INSTRUÇÕES CENTRAIS (auto-carregadas): papel + regras
+├── README.md               ← este arquivo (protocolo detalhado)
 ├── GLOSSARIO.md            ← terminologia OBRIGATÓRIA e travada
 ├── GUIA-DE-ESTILO.md       ← voz, tom, OCR, markdown, checagem final
 ├── GLOSSARIO-CANDIDATOS.md ← fila de termos novos a oficializar
@@ -33,7 +34,10 @@ traducao-pt-BR/
 > Cada sessão traduz **um** bloco (ou alguns, se sobrar orçamento). É curta,
 > autocontida e reprodutível. Faça exatamente isto:
 
+0. **Sincronize primeiro:** `git pull` na branch de trabalho (evita retraduzir
+   blocos já feitos e conflitos no MANIFEST).
 1. **Carregue o contexto fixo** (sempre, toda sessão):
+   - `CLAUDE.md` (auto-carregado — papel e regras invioláveis);
    - leia `GLOSSARIO.md` inteiro;
    - leia `GUIA-DE-ESTILO.md` inteiro.
 2. **Pegue o próximo bloco pendente:**
@@ -49,7 +53,11 @@ traducao-pt-BR/
 4. **Traduza** aplicando glossário + guia de estilo. Preserve títulos,
    `<!-- image -->`, tabelas e a estrutura de parágrafos.
 5. **Salve** a tradução em `blocos/NNN.md` (só o texto traduzido).
-6. **Rode a checagem final** do GUIA-DE-ESTILO (seção 7).
+6. **Verifique a paridade estrutural** (guardião contra omissão):
+   ```
+   python3 ferramentas.py verificar NNN
+   ```
+   Só siga com **APROVADO**. Depois rode a checagem final do GUIA-DE-ESTILO §7.
 7. **Registre termos novos** (se houver) em `GLOSSARIO-CANDIDATOS.md`.
 8. **Marque o bloco como concluído:**
    ```
@@ -57,6 +65,11 @@ traducao-pt-BR/
    ```
 9. **Commit + push** com mensagem clara, ex.:
    `traducao: bloco NNN (<titulo>) PT-BR`.
+
+> **Sessões em paralelo?** Antes do passo 3, reserve o bloco e publique a
+> reserva: `python3 ferramentas.py reservar NNN <sessao>` + commit/push. Se o
+> push for rejeitado, `git pull --rebase` e tente de novo; se o bloco já estiver
+> tomado, pegue o próximo pendente.
 
 ## Regras de ouro entre sessões
 - **Uma sessão nunca reescreve blocos já `done`** — evita divergência de estilo.
