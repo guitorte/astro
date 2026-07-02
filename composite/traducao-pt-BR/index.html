@@ -1,0 +1,379 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="light dark">
+<title>Composto — Consulta</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%E2%9C%A8%3C/text%3E%3C/svg%3E">
+<link rel="apple-touch-icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%E2%9C%A8%3C/text%3E%3C/svg%3E">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Composto">
+<meta name="theme-color" content="#5b4b8a">
+<style>
+  :root{
+    --bg:#f6f5f2; --card:#fff; --ink:#1c1b19; --muted:#6b6760;
+    --line:#e4e1db; --accent:#5b4b8a; --accent-ink:#fff; --sel:#efeaf7;
+    --safe: env(safe-area-inset-bottom, 0px);
+  }
+  @media (prefers-color-scheme: dark){
+    :root{ --bg:#151412; --card:#201f1c; --ink:#eceae5; --muted:#9d988e;
+           --line:#33312c; --accent:#a894e0; --accent-ink:#1a1626; --sel:#2b2740; }
+  }
+  *{ box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  html,body{ margin:0; }
+  body{
+    font:16px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    background:var(--bg); color:var(--ink);
+    padding-bottom: calc(84px + var(--safe));
+  }
+  .wrap{ max-width:640px; margin:0 auto; }
+
+  header.top{
+    position:sticky; top:0; z-index:20; background:var(--bg);
+    border-bottom:1px solid var(--line);
+    padding:12px 16px calc(10px);
+  }
+  header.top h1{ font-size:17px; margin:0 0 2px; font-weight:700; letter-spacing:.2px; }
+  header.top p{ margin:0 0 10px; font-size:12.5px; color:var(--muted); }
+  .search{ display:flex; gap:8px; align-items:center; }
+  .search input{
+    flex:1; font-size:16px; padding:11px 12px; border-radius:12px;
+    border:1px solid var(--line); background:var(--card); color:var(--ink);
+  }
+  .search input:focus{ outline:2px solid var(--accent); border-color:transparent; }
+
+  .status{ padding:24px 16px; color:var(--muted); text-align:center; }
+  .status.err{ color:#b23b3b; }
+
+  .planet{ border-bottom:1px solid var(--line); background:var(--card); }
+  .planet > .phead{
+    display:flex; align-items:center; gap:10px; width:100%;
+    padding:14px 16px; background:none; border:0; color:inherit; cursor:pointer;
+    font-size:16px; font-weight:650; text-align:left;
+  }
+  .phead .chev{ transition:transform .18s; color:var(--muted); font-size:13px; width:14px; }
+  .planet.open .phead .chev{ transform:rotate(90deg); }
+  .phead .pname{ flex:1; }
+  .badge{
+    font-size:12px; font-weight:600; color:var(--muted);
+    background:var(--bg); border:1px solid var(--line);
+    padding:2px 9px; border-radius:999px; min-width:34px; text-align:center;
+  }
+  .badge.has{ color:var(--accent-ink); background:var(--accent); border-color:var(--accent); }
+
+  .pbody{ display:none; padding:2px 0 8px; }
+  .planet.open .pbody{ display:block; }
+
+  .section-h{
+    display:flex; align-items:center; justify-content:space-between;
+    padding:8px 16px 4px; font-size:12px; text-transform:uppercase;
+    letter-spacing:.7px; color:var(--muted);
+  }
+  .section-h button{
+    font-size:12px; color:var(--accent); background:none; border:0; cursor:pointer;
+    padding:4px 2px; font-weight:600;
+  }
+
+  label.item{
+    display:flex; align-items:flex-start; gap:12px;
+    padding:11px 16px; cursor:pointer; border-top:1px solid var(--line);
+  }
+  label.item:first-of-type{ border-top:0; }
+  label.item.sel{ background:var(--sel); }
+  label.item input{ margin-top:3px; width:20px; height:20px; accent-color:var(--accent); flex:0 0 auto; }
+  label.item .txt{ font-size:15px; }
+  .hidden{ display:none !important; }
+
+  .actionbar{
+    position:fixed; left:0; right:0; bottom:0; z-index:30;
+    background:var(--card); border-top:1px solid var(--line);
+    padding:12px 16px calc(12px + var(--safe));
+    display:flex; gap:10px; align-items:center;
+  }
+  .actionbar .count{ font-size:13px; color:var(--muted); flex:1; }
+  .actionbar .count b{ color:var(--ink); }
+  .btn{
+    font-size:15px; font-weight:650; padding:12px 16px; border-radius:12px;
+    border:1px solid var(--line); background:var(--card); color:var(--ink); cursor:pointer;
+  }
+  .btn.primary{ background:var(--accent); color:var(--accent-ink); border-color:var(--accent); }
+  .btn:disabled{ opacity:.45; cursor:default; }
+
+  /* Reading / export view */
+  #reader{ position:fixed; inset:0; z-index:50; background:var(--bg); display:none; flex-direction:column; }
+  #reader.show{ display:flex; }
+  .reader-bar{
+    position:sticky; top:0; display:flex; gap:8px; align-items:center;
+    padding:10px 12px calc(10px); background:var(--bg); border-bottom:1px solid var(--line);
+  }
+  .reader-bar .sp{ flex:1; }
+  .reader-doc{ overflow:auto; padding:18px 18px 40px; }
+  .reader-doc .doc{ max-width:680px; margin:0 auto; }
+  .reader-doc h1{ font-size:20px; margin:0 0 4px; }
+  .reader-doc .src{ color:var(--muted); font-size:12.5px; margin:0 0 20px; }
+  .reader-doc h2{ font-size:18px; margin:26px 0 4px; padding-bottom:4px; border-bottom:2px solid var(--line); }
+  .reader-doc h3{ font-size:15.5px; margin:18px 0 6px; color:var(--accent); }
+  .reader-doc p{ margin:0 0 11px; }
+
+  @media print{
+    body{ background:#fff; padding:0; }
+    body > *:not(#reader){ display:none !important; }
+    #reader{ position:static; display:block; }
+    .reader-bar{ display:none !important; }
+    .reader-doc{ overflow:visible; padding:0; }
+    .reader-doc h3{ color:#000; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <h1>Planetas no Composto — Consulta</h1>
+    <p>Marque o que quer ler e toque em <b>Gerar</b>. Fonte: R. Hand · tradução PT-BR.</p>
+    <div class="search">
+      <input id="q" type="search" inputmode="search" placeholder="Buscar (ex.: netuno, sétima casa, trígono)" autocomplete="off">
+    </div>
+  </header>
+
+  <div id="list"><div class="status" id="status">Carregando dicionário…</div></div>
+</div>
+
+<div class="actionbar">
+  <span class="count"><b id="selCount">0</b> selecionado(s)</span>
+  <button class="btn" id="clearBtn" disabled>Limpar</button>
+  <button class="btn primary" id="genBtn" disabled>Gerar</button>
+</div>
+
+<div id="reader" aria-hidden="true">
+  <div class="reader-bar">
+    <button class="btn" id="backBtn">← Voltar</button>
+    <span class="sp"></span>
+    <button class="btn" id="mdBtn">.md</button>
+    <button class="btn primary" id="printBtn">Imprimir / PDF</button>
+  </div>
+  <div class="reader-doc"><div class="doc" id="doc"></div></div>
+</div>
+
+<script>
+"use strict";
+const JSON_URL = "./DICIONARIO-CONSULTA.json";
+const norm = s => (s||"").normalize("NFD").replace(/[̀-ͯ]/g,"").toLowerCase();
+
+let MODEL = [];            // [{id, planet, section, name, text}]
+let META = null;
+const selected = new Set();
+
+const $ = id => document.getElementById(id);
+
+function paras(txt){ return String(txt).split(/\n{2,}/).map(p=>p.trim()).filter(Boolean); }
+
+function buildModel(data){
+  META = data._meta || null;
+  const order = Object.keys(data).filter(k => k !== "_meta");
+  const out = [];
+  let n = 0;
+  for(const planet of order){
+    const p = data[planet];
+    if(typeof p !== "object" || p === null) continue;
+    if(p.significado)
+      out.push({id:"i"+(n++), planet, section:"significado", name:"Significado", text:p.significado});
+    const casas = p.casas || p.posicoes;
+    if(casas) for(const [name,text] of Object.entries(casas))
+      out.push({id:"i"+(n++), planet, section:"casas", name, text});
+    if(p.aspectos) for(const [name,text] of Object.entries(p.aspectos))
+      out.push({id:"i"+(n++), planet, section:"aspectos", name, text});
+  }
+  return out;
+}
+
+const SECT_LABEL = { significado:"Significado", casas:"Posições / Casas", aspectos:"Aspectos" };
+
+function render(){
+  const list = $("list");
+  list.innerHTML = "";
+  const byPlanet = new Map();
+  for(const it of MODEL){
+    if(!byPlanet.has(it.planet)) byPlanet.set(it.planet, []);
+    byPlanet.get(it.planet).push(it);
+  }
+  for(const [planet, items] of byPlanet){
+    const wrap = document.createElement("div");
+    wrap.className = "planet"; wrap.dataset.planet = planet;
+
+    const head = document.createElement("button");
+    head.className = "phead"; head.type = "button";
+    head.innerHTML = '<span class="chev">▶</span><span class="pname"></span><span class="badge">0</span>';
+    head.querySelector(".pname").textContent = planet;
+    head.addEventListener("click", ()=> wrap.classList.toggle("open"));
+    wrap.appendChild(head);
+
+    const body = document.createElement("div");
+    body.className = "pbody";
+
+    // group items by section preserving order
+    let curSec = null, secItems = [];
+    const flush = ()=>{
+      if(!secItems.length) return;
+      const sh = document.createElement("div");
+      sh.className = "section-h";
+      const lbl = document.createElement("span");
+      lbl.textContent = SECT_LABEL[curSec] || curSec;
+      const all = document.createElement("button"); all.type="button"; all.textContent="Todos";
+      const ids = secItems.map(x=>x.id);
+      all.addEventListener("click", (e)=>{
+        e.stopPropagation();
+        const allSel = ids.every(id=>selected.has(id));
+        ids.forEach(id=> allSel ? selected.delete(id) : selected.add(id));
+        syncAll();
+      });
+      sh.appendChild(lbl); if(curSec!=="significado") sh.appendChild(all);
+      body.appendChild(sh);
+      for(const it of secItems){
+        const lab = document.createElement("label");
+        lab.className = "item"; lab.dataset.id = it.id;
+        lab.dataset.hay = norm(planet+" "+it.name);
+        const cb = document.createElement("input"); cb.type="checkbox";
+        cb.checked = selected.has(it.id);
+        cb.addEventListener("change", ()=>{
+          cb.checked ? selected.add(it.id) : selected.delete(it.id);
+          syncAll();
+        });
+        const tx = document.createElement("span"); tx.className="txt"; tx.textContent = it.name;
+        lab.appendChild(cb); lab.appendChild(tx);
+        body.appendChild(lab);
+      }
+      secItems = [];
+    };
+    for(const it of items){
+      if(it.section !== curSec){ flush(); curSec = it.section; }
+      secItems.push(it);
+    }
+    flush();
+    wrap.appendChild(body);
+    list.appendChild(wrap);
+  }
+  syncAll();
+}
+
+function syncAll(){
+  // checkboxes + row highlight
+  document.querySelectorAll("label.item").forEach(lab=>{
+    const on = selected.has(lab.dataset.id);
+    lab.classList.toggle("sel", on);
+    const cb = lab.querySelector("input"); if(cb.checked !== on) cb.checked = on;
+  });
+  // per-planet badges
+  document.querySelectorAll(".planet").forEach(w=>{
+    const ids = [...w.querySelectorAll("label.item")].map(l=>l.dataset.id);
+    const c = ids.filter(id=>selected.has(id)).length;
+    const b = w.querySelector(".badge");
+    b.textContent = c ? (c+"/"+ids.length) : ids.length;
+    b.classList.toggle("has", c>0);
+  });
+  const n = selected.size;
+  $("selCount").textContent = n;
+  $("genBtn").disabled = n===0;
+  $("clearBtn").disabled = n===0;
+}
+
+function applySearch(){
+  const term = norm($("q").value.trim());
+  document.querySelectorAll(".planet").forEach(w=>{
+    let anyVisible = false;
+    w.querySelectorAll("label.item").forEach(lab=>{
+      const hit = !term || lab.dataset.hay.includes(term);
+      lab.classList.toggle("hidden", !hit);
+      if(hit) anyVisible = true;
+    });
+    // hide section headers whose items are all hidden
+    w.querySelectorAll(".section-h").forEach(sh=>{
+      let sib = sh.nextElementSibling, shown=false;
+      while(sib && sib.classList.contains("item")){
+        if(!sib.classList.contains("hidden")) shown=true;
+        sib = sib.nextElementSibling;
+      }
+      sh.classList.toggle("hidden", !shown);
+    });
+    w.classList.toggle("hidden", !anyVisible);
+    if(term && anyVisible) w.classList.add("open");
+  });
+}
+
+// ---------- Generate output ----------
+function selectedInOrder(){ return MODEL.filter(it=>selected.has(it.id)); }
+
+function buildReader(){
+  const items = selectedInOrder();
+  const doc = $("doc");
+  doc.innerHTML = "";
+  const h1 = document.createElement("h1"); h1.textContent = "Consulta — Planetas no Composto";
+  const src = document.createElement("p"); src.className="src";
+  src.textContent = (META && META.fonte ? META.fonte : "Planets in Composite — Robert Hand") + " · tradução PT-BR";
+  doc.appendChild(h1); doc.appendChild(src);
+  let curPlanet = null;
+  for(const it of items){
+    if(it.planet !== curPlanet){
+      curPlanet = it.planet;
+      const h2 = document.createElement("h2"); h2.textContent = curPlanet; doc.appendChild(h2);
+    }
+    const h3 = document.createElement("h3"); h3.textContent = it.name; doc.appendChild(h3);
+    for(const p of paras(it.text)){ const el=document.createElement("p"); el.textContent=p; doc.appendChild(el); }
+  }
+  $("reader").classList.add("show");
+  $("reader").setAttribute("aria-hidden","false");
+  $("reader").querySelector(".reader-doc").scrollTop = 0;
+}
+
+function buildMarkdown(){
+  const items = selectedInOrder();
+  const out = [];
+  out.push("# Consulta — Planetas no Composto");
+  out.push("> " + (META && META.fonte ? META.fonte : "Planets in Composite — Robert Hand") + " · tradução PT-BR");
+  out.push("");
+  let curPlanet = null;
+  for(const it of items){
+    if(it.planet !== curPlanet){ curPlanet = it.planet; out.push("## "+curPlanet); out.push(""); }
+    out.push("### "+it.name); out.push("");
+    for(const p of paras(it.text)){ out.push(p); out.push(""); }
+  }
+  return out.join("\n");
+}
+
+function download(name, text){
+  const blob = new Blob([text], {type:"text/markdown;charset=utf-8"});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url; a.download = name;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(()=>URL.revokeObjectURL(url), 1500);
+}
+
+// ---------- wire up ----------
+$("q").addEventListener("input", applySearch);
+$("clearBtn").addEventListener("click", ()=>{ selected.clear(); syncAll(); });
+$("genBtn").addEventListener("click", buildReader);
+$("backBtn").addEventListener("click", ()=>{
+  $("reader").classList.remove("show"); $("reader").setAttribute("aria-hidden","true");
+});
+$("printBtn").addEventListener("click", ()=> window.print());
+$("mdBtn").addEventListener("click", ()=>{
+  const d = new Date().toISOString().slice(0,10);
+  download("composto-consulta-"+d+".md", buildMarkdown());
+});
+
+fetch(JSON_URL, {cache:"no-store"})
+  .then(r=>{ if(!r.ok) throw new Error("HTTP "+r.status); return r.json(); })
+  .then(data=>{
+    MODEL = buildModel(data);
+    if(!MODEL.length) throw new Error("dicionário vazio");
+    render();
+  })
+  .catch(err=>{
+    $("status").className = "status err";
+    $("status").innerHTML = "Não consegui carregar <code>"+JSON_URL+"</code>.<br>"+
+      "Publique este arquivo na mesma pasta do JSON e acesse via GitHub Pages (http/https).<br><small>"+err+"</small>";
+  });
+</script>
+</body>
+</html>
