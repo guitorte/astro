@@ -3,7 +3,7 @@ block_id,status,src_start_line,src_end_line,word_count,primary_title,session_by,
 002,done,35,76,736,Contents,exemplar-referencia-opus,blocos/002.md,EXEMPLAR de referencia.
 003,done,77,128,1983,Introduction,exemplar-referencia-opus,blocos/003.md,EXEMPLAR de referencia.
 004,done,129,285,2505,Chapter One: Casting the Chart,haiku-session,blocos/004.md,
-005,pending,286,363,1765,Multiple Composites,,blocos/005.md,
+005,done,286,363,1765,Multiple Composites,haiku-session,blocos/005.md,
 006,pending,364,471,1743,The Vertex,,blocos/006.md,
 007,pending,472,549,2799,Chapter Two: Reading the Chart,,blocos/007.md,
 008,pending,550,643,3353,Chapter Three: Case Studies,,blocos/008.md,
