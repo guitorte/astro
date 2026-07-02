@@ -39,8 +39,10 @@ vez; o valor do processo está em blocos pequenos, consistentes e reproduzíveis
 ## Fluxo obrigatório da sessão
 1. `git pull` (ou fetch) na branch de trabalho — **comece sempre do estado mais
    recente**, senão você retraduz blocos já feitos ou gera conflito no MANIFEST.
-2. Leia `GLOSSARIO.md` e `GUIA-DE-ESTILO.md` por inteiro.
-3. `python3 ferramentas.py proximo` → identifique o bloco.
+2. Leia `GLOSSARIO.md` e `GUIA-DE-ESTILO.md` por inteiro (NÃO leia o fonte
+   inteiro — ver "Dieta de contexto").
+3. `python3 ferramentas.py continuar` → ele diz o bloco e a próxima ação
+   (inclusive se há bloco órfão a recuperar).
 4. (Se houver risco de sessões em paralelo) `python3 ferramentas.py reservar NNN
    <sua-sessao>` e **faça commit+push dessa reserva antes de traduzir**.
 5. `python3 ferramentas.py extrair NNN` → traduza **exatamente** esse trecho.
@@ -72,6 +74,43 @@ vez; o valor do processo está em blocos pequenos, consistentes e reproduzíveis
   títulos de capítulo travados e **mantenha os números** do original.
 - **Push falhou por rede:** tente de novo com espera crescente (2s, 4s, 8s, 16s)
   até 4 vezes. Só faça push para a branch de trabalho designada.
+
+## Retomada entre sessões ("continue de onde parou")
+O estado do projeto **não vive na sua memória** — vive no **git** (o `MANIFEST.csv`
+diz o que está `done`/`in_progress`/`pending`, e `blocos/` guarda as traduções).
+Qualquer sessão nova, em qualquer container, retoma assim:
+1. `git pull` na branch de trabalho (traz o estado real e mais recente).
+2. `python3 ferramentas.py continuar` — este comando **é** o bastão: ele diz
+   quantos blocos faltam e **qual é a próxima ação exata**.
+3. Faça o que ele mandar. Fim. Você não precisa de nenhum resumo da sessão
+   anterior — o `continuar` reconstrói tudo sozinho.
+
+**Sessão anterior que caiu no meio (bloco órfão `in_progress`):** o `continuar`
+detecta e resolve:
+- se já existe tradução válida do bloco → ele manda `verificar` + `concluir`;
+- se a tradução está ausente/incompleta → ele manda você **assumir o bloco e
+  traduzi-lo do zero** (ou `soltar NNN` para devolvê-lo à fila).
+Nunca deixe um bloco preso em `in_progress` ao encerrar: ou conclua, ou `soltar`.
+
+## Dieta de contexto (orçamento de tokens) — CRÍTICO
+Cada sessão tem ~200k tokens. **Não desperdice nenhum** carregando o que não
+precisa. A causa nº 1 de sessão "que já começa na metade do limite" é ler o
+livro inteiro.
+- **NUNCA** abra/`Read`/`cat` o arquivo-fonte `composite_planets_restructured.md`
+  inteiro. Ele tem **~185 mil tokens** — sozinho quase enche a janela.
+  **Sempre** obtenha o trecho do seu bloco com `python3 ferramentas.py extrair
+  NNN` (~2,5k tokens).
+- **NUNCA** leia `RESULTADO.md` (cresce sem limite) nem outros arquivos de
+  `blocos/` "para pegar contexto". Você não precisa deles: a consistência vem do
+  **glossário**, não de reler traduções passadas.
+- **Kit de leitura da sessão (e só ele):** `CLAUDE.md` (~1,2k) + `GLOSSARIO.md`
+  (~1,7k) + `GUIA-DE-ESTILO.md` (~1k) + o bloco via `extrair` (~2,5k). Total
+  ~6–7k tokens. Sobra a janela inteira para traduzir com folga.
+- Prefira os comandos do `ferramentas.py` a leituras amplas de arquivo: `proximo`,
+  `continuar` e `verificar` devolvem só o essencial.
+- Um bloco = uma sessão enxuta. Se quiser fazer vários, faça-os **em sequência**
+  (traduz, conclui, dá push, e só então começa o próximo) — não carregue tudo de
+  uma vez.
 
 ## Definição de pronto (Definition of Done) de um bloco
 Traduzido integralmente • glossário respeitado • `verificar` APROVADO • termos
