@@ -1,7 +1,7 @@
 block_id,status,src_start_line,src_end_line,word_count,primary_title,session_by,output_file,notes
-001,done,1,34,194,Planets in Composite,exemplar-referencia-opus,blocos/001.md,
-002,pending,35,76,736,Contents,,blocos/002.md,
-003,pending,77,128,1983,Introduction,,blocos/003.md,
+001,done,1,34,194,Planets in Composite,exemplar-referencia-opus,blocos/001.md,EXEMPLAR de referencia.
+002,done,35,76,736,Contents,exemplar-referencia-opus,blocos/002.md,EXEMPLAR de referencia.
+003,done,77,128,1983,Introduction,exemplar-referencia-opus,blocos/003.md,EXEMPLAR de referencia.
 004,pending,129,285,2505,Chapter One: Casting the Chart,,blocos/004.md,
 005,pending,286,363,1765,Multiple Composites,,blocos/005.md,
 006,pending,364,471,1743,The Vertex,,blocos/006.md,
@@ -14,9 +14,9 @@ block_id,status,src_start_line,src_end_line,word_count,primary_title,session_by,
 013,pending,800,855,1953,Chapter Four: Houses,,blocos/013.md,
 014,pending,856,917,1782,Sixth House,,blocos/014.md,
 015,pending,918,925,326,The Composite Ascendant,,blocos/015.md,
-016,pending,926,997,1860,Chapter Five: Sun,,blocos/016.md,
-017,pending,998,1063,1728,Sixth House,,blocos/017.md,
-018,pending,1064,1141,1914,Twelfth House,,blocos/018.md,
+016,done,926,997,1860,Chapter Five: Sun,exemplar-referencia-opus,blocos/016.md,EXEMPLAR. 5a casa: fragmento 'affect others' remontado (OCR).
+017,done,998,1063,1728,Sixth House,exemplar-referencia-opus,blocos/017.md,EXEMPLAR de referencia.
+018,done,1064,1141,1914,Twelfth House,exemplar-referencia-opus,blocos/018.md,EXEMPLAR de referencia.
 019,pending,1142,1223,1789,Conjunct Mars,,blocos/019.md,
 020,pending,1224,1295,1858,Trine Jupiter,,blocos/020.md,
 021,pending,1296,1373,1854,Sextile Uranus,,blocos/021.md,
