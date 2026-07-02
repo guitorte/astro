@@ -11,7 +11,7 @@ block_id,status,src_start_line,src_end_line,word_count,primary_title,session_by,
 010,done,674,703,1381,Case Three: The Duke and Duchess of Windsor,haiku-session,blocos/010.md,
 011,done,704,737,1612,Case Four: Nicholas and Alexandra,haiku-session,blocos/011.md,
 012,done,738,799,2491,Case Five: Freud and Jung,haiku-session,blocos/012.md,
-013,pending,800,855,1953,Chapter Four: Houses,,blocos/013.md,
+013,done,800,855,1953,Chapter Four: Houses,haiku-session,blocos/013.md,
 014,pending,856,917,1782,Sixth House,,blocos/014.md,
 015,pending,918,925,326,The Composite Ascendant,,blocos/015.md,
 016,done,926,997,1860,Chapter Five: Sun,exemplar-referencia-opus,blocos/016.md,EXEMPLAR. 5a casa: fragmento 'affect others' remontado (OCR).
