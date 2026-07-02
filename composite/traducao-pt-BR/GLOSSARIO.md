@@ -43,6 +43,8 @@ Livro: *Planets in Composite: Analyzing Human Relationships* — Robert Hand.
 | progression / secondary directions | progressão / direções secundárias | |
 | progressed chart | mapa progredido | |
 | ephemeris | efeméride | |
+| tables of houses | tábuas de casas | |
+| solar return | revolução solar | |
 | degree | grau | |
 | arc | arco | |
 | element (fire/earth/air/water) | elemento (fogo/terra/ar/água) | |
@@ -152,7 +154,12 @@ O livro fala o tempo todo com **um casal** (duas pessoas). Isto rege o "você".
 | self-expression | autoexpressão |
 | ego drives | impulsos do ego |
 | self-delusion | autoilusão |
+| self-defeating | autodestrutivo |
 | soul-union | união de almas |
+| masculine / feminine principle | princípio masculino / feminino |
+| staying power | fôlego para o longo prazo |
+| one-upmanship | jogos de "quem leva vantagem" |
+| partnership | parceria |
 
 ## 8. Nomes próprios — NÃO traduzir
 
