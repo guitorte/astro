@@ -1,0 +1,509 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#151A2B">
+<title>Mapa Composto — Aspectos (Sol a Marte)</title>
+<style>
+:root{
+  --night:#151A2B; --deep:#10142180; --panel:#1D2339; --line:#2C3450;
+  --ink:#E9E3D5; --dim:#9BA3BE; --brass:#D7B25E; --flow:#7FC0A8; --tension:#D0697F;
+  --fs:17px;
+}
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--night);color:var(--ink);
+  font:var(--fs)/1.62 Georgia,"Iowan Old Style","Times New Roman",serif;
+  padding-bottom:5rem;overflow-wrap:break-word}
+.ui{font-family:-apple-system,"Segoe UI",Roboto,system-ui,sans-serif}
+
+header{position:sticky;top:0;z-index:20;background:rgba(21,26,43,.97);
+  backdrop-filter:blur(8px);border-bottom:1px solid var(--line);
+  padding:.55rem .8rem calc(.45rem + env(safe-area-inset-top,0)) }
+.bar{display:flex;align-items:center;gap:.5rem}
+h1{font-size:.95rem;font-weight:600;margin:0;letter-spacing:.01em;flex:1;line-height:1.25}
+h1 small{display:block;font:400 .72rem/1.3 -apple-system,Roboto,sans-serif;color:var(--dim)}
+.size{display:flex;gap:.25rem}
+.size button{width:2rem;height:2rem;border-radius:.5rem;border:1px solid var(--line);
+  background:var(--panel);color:var(--ink);font-size:.8rem;cursor:pointer}
+.search{display:flex;align-items:center;gap:.5rem;margin-top:.5rem;background:var(--panel);
+  border:1px solid var(--line);border-radius:.7rem;padding:.1rem .6rem}
+.search input{flex:1;background:none;border:0;color:var(--ink);padding:.6rem 0;font-size:.95rem;
+  font-family:-apple-system,Roboto,sans-serif}
+.search input:focus{outline:none}
+.search input::-webkit-search-cancel-button{display:none}
+.search span{color:var(--dim);font-size:1rem}
+#clear{background:none;border:0;color:var(--dim);font-size:1.2rem;padding:0 .2rem;display:none;cursor:pointer}
+.chips{display:flex;gap:.4rem;overflow-x:auto;margin-top:.5rem;padding-bottom:.15rem;
+  scrollbar-width:none}
+.chips::-webkit-scrollbar{display:none}
+.chip{flex:0 0 auto;padding:.38rem .7rem;border-radius:999px;border:1px solid var(--line);
+  background:transparent;color:var(--dim);font:500 .78rem/1 -apple-system,Roboto,sans-serif;cursor:pointer}
+.chip.on{background:var(--brass);border-color:var(--brass);color:#1A1608}
+
+main{padding:0 .8rem;max-width:44rem;margin:0 auto}
+.note{border-left:2px solid var(--brass);padding:.1rem 0 .1rem .8rem;margin:1rem 0 0;
+  color:var(--dim);font-size:.86rem;line-height:1.55}
+.note p{margin:.5rem 0}
+details.note-wrap{margin:.9rem 0 .2rem}
+details.note-wrap>summary{list-style:none;color:var(--brass);font:500 .8rem/1 -apple-system,Roboto,sans-serif;
+  padding:.4rem 0;cursor:pointer}
+details.note-wrap>summary::-webkit-details-marker{display:none}
+
+h2{font-size:.78rem;font-weight:600;letter-spacing:.06em;color:var(--brass);
+  font-family:-apple-system,Roboto,sans-serif;margin:1.7rem 0 .6rem;
+  padding-bottom:.35rem;border-bottom:1px solid var(--line)}
+
+.card{border:1px solid var(--line);border-radius:.85rem;margin:.55rem 0;background:var(--panel);
+  overflow:hidden}
+.head{width:100%;display:flex;align-items:flex-start;gap:.65rem;padding:.85rem .8rem .6rem;
+  background:none;border:0;color:inherit;text-align:left;font:inherit;cursor:pointer}
+.glyph{flex:0 0 1.9rem;height:1.9rem;display:grid;place-items:center;border-radius:.5rem;
+  background:#252C46;color:var(--brass);font-size:1.05rem;line-height:1}
+.titles{flex:1;min-width:0}
+.pt{display:block;font-size:1rem;font-weight:600;line-height:1.35}
+.tag{display:inline-block;margin-top:.3rem;font:600 .68rem/1 -apple-system,Roboto,sans-serif;
+  padding:.26rem .5rem;border-radius:.35rem}
+.t-flow{background:#1C332C;color:var(--flow)}
+.t-tension{background:#35202A;color:var(--tension)}
+.t-focus{background:#2E2618;color:var(--brass)}
+.chev{flex:0 0 auto;width:.55rem;height:.55rem;margin-top:.65rem;border-right:2px solid var(--dim);
+  border-bottom:2px solid var(--dim);transform:rotate(45deg);transition:transform .18s}
+.card.open .chev{transform:rotate(225deg)}
+.synth{margin:0;padding:0 .85rem .85rem;color:var(--dim);font-size:.92rem;line-height:1.55}
+.body{padding:0 .85rem 1rem;border-top:1px solid var(--line);margin-top:.1rem}
+.body p{margin:.85rem 0}
+.en{font:600 .74rem/1.3 -apple-system,Roboto,sans-serif;letter-spacing:.05em;color:var(--brass);
+  margin:.9rem 0 0}
+mark{background:#4A3C12;color:#FFE9A8;border-radius:.15rem;padding:0 .1em}
+
+.fab{position:fixed;right:.9rem;bottom:calc(1rem + env(safe-area-inset-bottom,0));z-index:30;
+  display:flex;flex-direction:column;gap:.5rem}
+.fab button{width:2.9rem;height:2.9rem;border-radius:50%;border:1px solid var(--line);
+  background:rgba(29,35,57,.96);color:var(--ink);font-size:1rem;box-shadow:0 4px 14px #0008;cursor:pointer}
+.empty{text-align:center;color:var(--dim);padding:3rem 1rem;font-size:.92rem;display:none}
+.count{color:var(--dim);font:400 .75rem/1 -apple-system,Roboto,sans-serif;padding:.7rem 0 0}
+@media (prefers-reduced-motion:reduce){*{transition:none!important;scroll-behavior:auto!important}}
+:focus-visible{outline:2px solid var(--brass);outline-offset:2px}
+</style>
+</head>
+<body>
+<header>
+  <div class="bar ui">
+    <h1>Mapa Composto<small>Aspectos do Sol até Marte — Robert Hand</small></h1>
+    <div class="size"><button id="minus" aria-label="Diminuir texto">A−</button><button id="plus" aria-label="Aumentar texto">A+</button></div>
+  </div>
+  <div class="search ui"><span aria-hidden="true">⌕</span>
+    <input id="q" type="search" placeholder="Buscar aspecto, planeta, termo…" autocomplete="off" enterkeyhint="search">
+    <button id="clear" aria-label="Limpar busca">×</button></div>
+  <div class="chips ui"><button class="chip on" data-f="*">Tudo</button><button class="chip" data-f="Aspectos do Sol">Sol</button><button class="chip" data-f="Aspectos da Lua">Lua</button><button class="chip" data-f="Aspectos de Mercúrio">Mercúrio</button><button class="chip" data-f="Aspectos de Vênus">Vênus</button><button class="chip" data-f="Aspectos de Marte">Marte</button></div>
+</header>
+<main>
+  <details class="note-wrap ui"><summary>Sobre esta compilação</summary><div class="note"><p>Compilação dos trechos extraídos da obra <em>Planets in Composite</em> de Robert Hand para todos os aspectos presentes neste mapa desde o <strong>Sol até Marte</strong>.</p><p>Cada aspecto conta com o texto original em inglês acompanhado de uma síntese em português dos pontos centrais abordados pelo autor.</p></div></details>
+  <p class="count" id="count"></p>
+
+  <!-- 1. ASPECTOS DO SOL -->
+  <section class="group" data-sec="Aspectos do Sol"><h2 id="s-sol">Aspectos do Sol</h2>
+
+    <article class="card" data-sec="Aspectos do Sol" data-q="sun conjunct mercury chapter 5 conjunction sol conjuncao mercurio mental activity verbal communication nonverbal emotional intellectualize similarity thinking curiosity restless travel detached detachment sintese proporciona forte afinidade intelectual curiosidade compartilhada e clareza para conversar sobre o relacionamento o desafio e nao racionalizar excessivamente as emocoes lembrando-se de vivencia-las e senti-las sem reduzi-las apenas a conceitos logicos" id="c0">
+      <button class="head" aria-expanded="false" aria-controls="b0">
+        <span class="glyph" aria-hidden="true">☉</span>
+        <span class="titles"><span class="pt">Sol Conjunção Mercúrio</span><span class="tag t-focus">☌ Conjunção</span></span>
+        <span class="chev" aria-hidden="true"></span>
+      </button>
+      <p class="synth">Proporciona forte afinidade intelectual, curiosidade compartilhada e clareza para conversar sobre o relacionamento. O desafio é não racionalizar excessivamente as emoções, lembrando-se de vivenciá-las e senti-las sem reduzi-las apenas a conceitos lógicos.</p>
+      <div class="body" id="b0" hidden>
+        <h3 class="en">Sun Conjunct Mercury (Chapter 5)</h3>
+        <p>The conjunction of composite Sun and Mercury signifies that there will be a great deal of mental activity in this relationship. This aspect is good for verbal communication between you, but it does not especially favor nonverbal, emotional forms of communication. Do not make the mistake of thinking that your ability to talk means that all channels of communication between you are open. They may or may not be. Feelings and emotions are not readily reduced to the forms of communication ruled by Mercury. You both should be wary of the tendency to intellectualize your emotions rather than deal with them at the gut level.</p>
+        <p>But your verbal communication should be excellent. You have an unusual similarity of thinking, or at least a better than average ability to understand each other's thinking.</p>
+        <p>Mercury is a planet of travel, not always in the literal sense of the word, but in the metaphorical sense; that is, you like to be continually exposed to new ideas and experiences together. To others this may appear to be restlessness, but it is really only curiosity aroused by being together.</p>
+        <p>One of the most positive attributes of this aspect is the ability to be detached from what you are discussing. Because of this detachment you may even be able to talk about your relationship and arrive at understandings that will help you both to get more out of it. But in the process, do not neglect the emotional sides of the issues.</p>
+      </div>
+    </article>
+
+    <article class="card" data-sec="Aspectos do Sol" data-q="sun trine mars chapter 5 sol trigono marte energy work tasks athletic physical activity ego conflict complement healthy outlet team work together creatively athletics hard work sintese excelente aspecto para a cooperacao e vitalidade mutua os egos colaboram sem atritos destrutivos e o casal atua muito bem em equipe ao canalizar suas energias em projetos conjuntos ou atividades fisicas" id="c1">
+      <button class="head" aria-expanded="false" aria-controls="b1">
+        <span class="glyph" aria-hidden="true">☉</span>
+        <span class="titles"><span class="pt">Sol Trígono Marte</span><span class="tag t-flow">△ Trígono</span></span>
+        <span class="chev" aria-hidden="true"></span>
+      </button>
+      <p class="synth">Excelente aspecto para a cooperação e vitalidade mútua. Os egos colaboram sem atritos destrutivos, e o casal atua muito bem em equipe ao canalizar suas energias em projetos conjuntos ou atividades físicas.</p>
+      <div class="body" id="b1" hidden>
+        <h3 class="en">Sun Trine Mars (Chapter 5)</h3>
+        <p>Sun trine Mars in the composite chart indicates that as a result of this relationship you both will have great energy for accomplishing work or tasks of any sort. This is not to say that your relationship will necessarily be work-oriented, but only that the energy is available should you need it. You will enjoy all forms of physical and athletic activity together, even if singly you are not especially active.</p>
+        <p>If you do work together on any kind of task, your egos will not conflict and you will complement each other very well. Through this relationship you will be able to improve your understanding of yourselves and even reinforce your inner selves.</p>
+        <p>It would be good to find some outlet for the collective energies symbolized by this trine. The energy will express itself in a healthy manner if you let it. However, even the most benevolent energy can turn sour if it does not have an adequate outlet. Either some kind of work or some physical activity together would provide an excellent release for this energy.</p>
+        <p>This aspect signifies a lack of ego-conflict between you and an ability to work together creatively, accomplishing much. You will be competitive with others but not with each other. This aspect favors any activity involving athletics or physical fitness and any tasks that require hard work.</p>
+      </div>
+    </article>
+
+    <article class="card" data-sec="Aspectos do Sol" data-q="sun square saturn chapter 5 sol quadratura saturno cross purposes repressive criticism condemning accept freedom self-expression interpersonal warfare sintese pede cautela com cobrancas pessimismo e atitudes inibitorias o casal precisa aprender a aceitar as limitacoes e diferencas de ritmo de cada um sem recorrer a criticas corrosivas ou bloqueios na espontaneidade mutua" id="c2">
+      <button class="head" aria-expanded="false" aria-controls="b2">
+        <span class="glyph" aria-hidden="true">☉</span>
+        <span class="titles"><span class="pt">Sol Quadratura Saturno</span><span class="tag t-tension">□ Quadratura</span></span>
+        <span class="chev" aria-hidden="true"></span>
+      </button>
+      <p class="synth">Pede cautela com cobranças, pessimismo e atitudes inibitórias. O casal precisa aprender a aceitar as limitações e diferenças de ritmo de cada um sem recorrer a críticas corrosivas ou bloqueios na espontaneidade mútua.</p>
+      <div class="body" id="b2" hidden>
+        <h3 class="en">Sun Square Saturn (Chapter 5)</h3>
+        <p>Composite Sun square composite Saturn is likely to present some problems. First of all, it is an indication that your lives are presently at cross purposes to each other. It may be that you get in each other's way and then are not flexible enough to let the other do what he or she wants. One of you is very likely to become a repressive influence upon the other, constantly criticizing and condemning. There is a real question as to whether or not you can accept each other as you are.</p>
+        <p>It would be good if creative changes could occur spontaneously in each of you that would make your relationship more stable and pleasant, but you should not make this a condition of the relationship. You must be able to accept each other here and now, although this aspect makes it difficult to do that.</p>
+        <p>Try to avoid criticizing each other excessively, and do allow more freedom of self-expression. If you really cannot accept each other's annoying characteristics, it is probably best to get out of the relationship. The interpersonal warfare that this aspect can bring about will make you less complete as a couple than you are separately. And the only valid reason for a relationship is to make your lives more complete together than they are individually. Too much criticism and tearing each other down may make that impossible.</p>
+      </div>
+    </article>
+
+    <article class="card" data-sec="Aspectos do Sol" data-q="sun trine neptune chapter 5 sol trigono netuno idealism spiritual union psychic bond platonic beauty physical realm self-sacrifice sintese conexao psiquica e espiritual intensa marcada por sensibilidade altruismo e romantismo elevado o casal deve apenas zelar para que o idealismo e a comunhao sutil nao os afastem das exigencias praticas da rotina" id="c3">
+      <button class="head" aria-expanded="false" aria-controls="b3">
+        <span class="glyph" aria-hidden="true">☉</span>
+        <span class="titles"><span class="pt">Sol Trígono Netuno</span><span class="tag t-flow">△ Trígono</span></span>
+        <span class="chev" aria-hidden="true"></span>
+      </button>
+      <p class="synth">Conexão psíquica e espiritual intensa, marcada por sensibilidade, altruísmo e romantismo elevado. O casal deve apenas zelar para que o idealismo e a comunhão sutil não os afastem das exigências práticas da rotina.</p>
+      <div class="body" id="b3" hidden>
+        <h3 class="en">Sun Trine Neptune (Chapter 5)</h3>
+        <p>The trine of composite Sun and Neptune indicates that there is a good deal of idealism in this relationship. You will feel that it is an extraordinary union between two souls, perhaps even a spiritual union. Many of the thoughts you want to communicate to each other will not have to be spoken, for you will know beforehand what the other person is thinking. Often one of you will start to say something, only to find the other saying it too. In other words, there is a strong likelihood of a psychic bond between you.</p>
+        <p>The spiritualizing power of Neptune tends to negate the physical realm. For this reason, a relationship with a strong Neptune, such as this one, is likely to be platonic rather than physical. Nevertheless, the great feeling of beauty in such a relationship usually compensates for the fact that it does not operate on a physical plane as well as on a spiritual level.</p>
+        <p>Your lack of concern with the physical and material realms constitutes the major problem here. In a friendship it is perfectly all right to commune at such a high level, ignoring practicality. But in a love relationship, especially marriage, practical concerns have to be dealt with, and it may be difficult to bring yourselves down to that level.</p>
+        <p>But because Neptune rules self-sacrifice, one of the strongest bonds between you will be your willingness to give selflessly to each other at any time.</p>
+      </div>
+    </article>
+
+    <article class="card" data-sec="Aspectos do Sol" data-q="sun sextile pluto chapter 5 sol sextil plutao regeneration growth revive difficulty staying power evolution profound insight deep level sintese grande capacidade de recuperacao e resiliencia o vinculo promove transformacoes profundas e regeneradoras fortalecendo a relacao mesmo apos periodos de crise e permitindo que ambos amadurecam psicologicamente" id="c4">
+      <button class="head" aria-expanded="false" aria-controls="b4">
+        <span class="glyph" aria-hidden="true">☉</span>
+        <span class="titles"><span class="pt">Sol Sextil Plutão</span><span class="tag t-flow">⚹ Sextil</span></span>
+        <span class="chev" aria-hidden="true"></span>
+      </button>
+      <p class="synth">Grande capacidade de recuperação e resiliência. O vínculo promove transformações profundas e regeneradoras, fortalecendo a relação mesmo após períodos de crise e permitindo que ambos amadureçam psicologicamente.</p>
+      <div class="body" id="b4" hidden>
+        <h3 class="en">Sun Sextile Pluto (Chapter 5)</h3>
+        <p>The sextile of Sun and Pluto in the composite chart indicates that there is a powerful force for regeneration and growth in this relationship. Concretely, this aspect makes it possible for the two of you to revive your relationship after periods of difficulty, either between the two of you or between you as a couple and the outside world. It gives you staying power.</p>
+        <p>At the same time this aspect ensures that the experience of this relationship will have a strong effect on your views of the world and your ways of thinking about it. For the most part, these effects should be positive, involving greater understanding of yourselves as individuals and as partners in a relationship. You will continually be made aware of new aspects of yourselves, as they are brought to the surface and examined by both of you. In most respects this is a serious relationship, meaning that you will be involved with each other at a very deep and profound level.</p>
+        <p>It may be that others will be somewhat afraid of the level of intensity between you, but don't pay any particular attention to their fears. They will come to see that there is nothing to be afraid of. The changes brought about in you through this relationship are good, necessary, and natural products of your own evolution.</p>
+        <p>Be prepared for the fact that your normal patterns of doing things will be altered by this relationship. This aspect signifies that new insights about yourselves will be revealed to you, but do not be afraid to deal with them. The results can only be good for both of you.</p>
+      </div>
+    </article>
+
+  </section>
+
+  <!-- 2. ASPECTOS DA LUA -->
+  <section class="group" data-sec="Aspectos da Lua"><h2 id="s-lua">Aspectos da Lua</h2>
+
+    <article class="card" data-sec="Aspectos da Lua" data-q="moon conjunct ascendant chapter 6 lua conjuncao ascendente emotions feelings emotional rapport subjectivity detachment blame harmony sintese da enorme proeminencia aos sentimentos criando uma sintonia emocional profunda e intuitiva deve-se tomar cuidado com o excesso de suscetibilidade e a falta de distanciamento para resolver conflitos de forma equilibrada" id="c5">
+      <button class="head" aria-expanded="false" aria-controls="b5">
+        <span class="glyph" aria-hidden="true">☽</span>
+        <span class="titles"><span class="pt">Lua Conjunção Ascendente</span><span class="tag t-focus">☌ Conjunção</span></span>
+        <span class="chev" aria-hidden="true"></span>
+      </button>
+      <p class="synth">Dá enorme proeminência aos sentimentos, criando uma sintonia emocional profunda e intuitiva. Deve-se tomar cuidado com o excesso de suscetibilidade e a falta de distanciamento para resolver conflitos de forma equilibrada.</p>
+      <div class="body" id="b5" hidden>
+        <h3 class="en">Moon Conjunct Ascendant (Chapter 6)</h3>
+        <p>The conjunction of composite Moon and Ascendant signifies a relationship in which your emotions and feelings play a very prominent role. Therefore, this aspect is more favorable to a personal relationship than to a professional one, because the subjectivity that is characteristic of the Moon is not very helpful in a relationship that requires clear thinking and detachment.</p>
+        <p>On the other hand, in a personal relationship, the Moon close to the composite Ascendant signifies that the two of you can achieve an emotional rapport and depth of shared feeling that will be the envy of many other couples. You will share your moods, emotions, and feelings with each other at all times, so that it will be easy for you to know each other on an inner level as well as an outer one.</p>
+        <p>Of course, this attribute can also be a problem. It may prevent you from seeing each other clearly at those times when a certain degree of objectivity and detachment are called for. During periods of stress in the relationship, you may get so wrapped up in your emotions that neither of you is capable of sorting out who is responsible for what. You each may blame your partner for situations that are really your own doing, which can lead to disruptive arguments between you. It is very important with this aspect of the Moon and composite Ascendant that there be many indications of harmony in the relationship. This could be a difficult aspect, but if other indications are good, it can also be an excellent aspect.</p>
+      </div>
+    </article>
+
+    <article class="card" data-sec="Aspectos da Lua" data-q="moon square venus chapter 6 lua quadratura venus attraction buffer air of compulsion fatal force love enduring sintese desperta uma atracao afetiva muito viva e urgente operando como amortecedor nas crises exige apenas cuidado para que a necessidade de conforto ou o encanto imediato nao mascarem incompatibilidades reais de longo prazo" id="c6">
+      <button class="head" aria-expanded="false" aria-controls="b6">
+        <span class="glyph" aria-hidden="true">☽</span>
+        <span class="titles"><span class="pt">Lua Quadratura Vênus</span><span class="tag t-tension">□ Quadratura</span></span>
+        <span class="chev" aria-hidden="true"></span>
+      </button>
+      <p class="synth">Desperta uma atração afetiva muito viva e urgente, operando como amortecedor nas crises. Exige apenas cuidado para que a necessidade de conforto ou o encanto imediato não mascarem incompatibilidades reais de longo prazo.</p>
+      <div class="body" id="b6" hidden>
+        <h3 class="en">Moon Square Venus (Chapter 6)</h3>
+        <p>Unlike most squares, the square of composite Moon and Venus cannot really be called a difficult aspect. It presents some problems, to be sure, but on the whole it is a rather benevolent aspect in a composite chart. Its major effect is to give an air of compulsion when this relationship is beginning: that is, you both have an urgent feeling that you should get together. This aspect creates a strong and lasting attraction between you, and like all Moon-Venus aspects, it acts as a buffer against bad times within a relationship.</p>
+        <p>The only real difficulty here is that even if you are not really suited to each other, you may be drawn together almost as if by a fatal force. This force of attraction is undiscriminating but strong enough to bind you together in what might otherwise be a very unstable, short-term affair. By itself this aspect will not tell you whether a relationship will be a good one; it only designates the presence of this powerful attraction. Therefore you must evaluate your relationship carefully. But if you are getting along well with each other, the feelings of love between you will be greater than average, and your relationship should endure.</p>
+      </div>
+    </article>
+
+    <article class="card" data-sec="Aspectos da Lua" data-q="moon trine jupiter chapter 6 lua trigono jupiter happy good feeling sympathy emotional understanding optimism children benefit uplifting sintese proporciona bem-estar calor afetivo conforto emocional mutuo e uma perspectiva generosa da vida compartilhada ajuda a superar fases dificeis com esperanca e boa vontade" id="c7">
+      <button class="head" aria-expanded="false" aria-controls="b7">
+        <span class="glyph" aria-hidden="true">☽</span>
+        <span class="titles"><span class="pt">Lua Trígono Júpiter</span><span class="tag t-flow">△ Trígono</span></span>
+        <span class="chev" aria-hidden="true"></span>
+      </button>
+      <p class="synth">Proporciona bem-estar, calor afetivo, conforto emocional mútuo e uma perspectiva generosa da vida compartilhada. Ajuda a superar fases difíceis com esperança e boa vontade.</p>
+      <div class="body" id="b7" hidden>
+        <h3 class="en">Moon Trine Jupiter (Chapter 6)</h3>
+        <p>The trine of composite Moon and Jupiter will have a good effect upon your relationship in several areas. First of all, it denotes that the two of you have a generally good feeling for each other. You feel happy together and enjoy each other's company. When you are depressed or low, being together will make you both feel better.</p>
+        <p>Second, this aspect will help to create a warm sympathy and deep emotional understanding between you, which will help you through any problems you may have to face.</p>
+        <p>Third, this relationship is likely to have a spiritually and morally uplifting effect upon you; it will make the world look better and will actually help you both understand what the world is all about, in a spirit not of resignation but of positive optimism.</p>
+        <p>In a marriage, this aspect instills a desire for children and makes it more likely that you will have them.</p>
+        <p>Because of the feelings of optimism and happiness that you have with each other, you will always feel that you benefit from being together.</p>
+      </div>
+    </article>
+
+    <article class="card" data-sec="Aspectos da Lua" data-q="moon square the nodes chapter 15 lua quadratura nodos lunares emotional union subjectivity emotions harmoniously sintese fortalece os lacos afetivos em nivel de alma mas indica que habitos emocionais do passado e reacoes inconscientes podem criar turbulencias ate que sejam conscientemente integrados" id="c8">
+      <button class="head" aria-expanded="false" aria-controls="b8">
+        <span class="glyph" aria-hidden="true">☽</span>
+        <span class="titles"><span class="pt">Lua Quadratura Nodos Lunares</span><span class="tag t-tension">□ Quadratura</span></span>
+        <span class="chev" aria-hidden="true"></span>
+      </button>
+      <p class="synth">Fortalece os laços afetivos em nível de alma, mas indica que hábitos emocionais do passado e reações inconscientes podem criar turbulências até que sejam conscientemente integrados.</p>
+      <div class="body" id="b8" hidden>
+        <h3 class="en">Moon square the nodes (Chapter 15)</h3>
+        <p>This aspect also indicates a very strong emotional union. However, here there is a strong danger that your extreme subjectivity will make it difficult to clearly understand this relationship. It may signify that you relate to each other almost entirely through your emotions, but not very harmoniously.</p>
+      </div>
+    </article>
+
+  </section>
+
+  <!-- 3. ASPECTOS DE MERCÚRIO -->
+  <section class="group" data-sec="Aspectos de Mercúrio"><h2 id="s-mercurio">Aspectos de Mercúrio</h2>
+
+    <article class="card" data-sec="Aspectos de Mercúrio" data-q="mercury square saturn chapter 7 mercurio quadratura saturno communication effort negative complain carping touch sintese alerta para silencios defensivos bloqueios na expressao e foco excessivo em defeitos ou queixas a superacao desse aspecto exige o compromisso deliberado de manter um dialogo aberto paciente e regular" id="c9">
+      <button class="head" aria-expanded="false" aria-controls="b9">
+        <span class="glyph" aria-hidden="true">☿</span>
+        <span class="titles"><span class="pt">Mercúrio Quadratura Saturno</span><span class="tag t-tension">□ Quadratura</span></span>
+        <span class="chev" aria-hidden="true"></span>
+      </button>
+      <p class="synth">Alerta para silêncios defensivos, bloqueios na expressão e foco excessivo em defeitos ou queixas. A superação desse aspecto exige o compromisso deliberado de manter um diálogo aberto, paciente e regular.</p>
+      <div class="body" id="b9" hidden>
+        <h3 class="en">Mercury Square Saturn (Chapter 7)</h3>
+        <p>Mercury square Saturn in the composite chart can present real problems in a relationship, for it symbolizes basic difficulties in communication. Most commonly the problem is not that the two of you cannot communicate but simply that you do not try. But you can get around the worst effects of this aspect if you make the effort to communicate. Do not assume that the other person knows what is on your mind. Try to say whatever you are thinking, and say it clearly.</p>
+        <p>You must be careful, however, for if this aspect does not cut off communication, it may make you dwell on negative subjects. You may say nothing to each other except to complain, and then communicate in the most irritating way possible. Or, on the other hand, you may carp about minor issues and say nothing about real ones.</p>
+        <p>As a couple, you must communicate regularly about all things, not just complaints and criticisms. Otherwise you each will feel that there is no reason to keep the relationship going, that it is not worth the effort. But if you keep in touch with each other, it will not be this way.</p>
+      </div>
+    </article>
+
+    <article class="card" data-sec="Aspectos de Mercúrio" data-q="mercury trine neptune chapter 7 mercurio trigono netuno sensitivity nonverbally intuitively harmony idealism poetic tendencies reality sintese favorece a empatia mental a comunicacao sutil e uma visao refinada do mundo o casal se compreende intuitivamente quase sem esforco precisando apenas manter clareza sobre os fatos imediatos" id="c10">
+      <button class="head" aria-expanded="false" aria-controls="b10">
+        <span class="glyph" aria-hidden="true">☿</span>
+        <span class="titles"><span class="pt">Mercúrio Trígono Netuno</span><span class="tag t-flow">△ Trígono</span></span>
+        <span class="chev" aria-hidden="true"></span>
+      </button>
+      <p class="synth">Favorece a empatia mental, a comunicação sutil e uma visão refinada do mundo. O casal se compreende intuitivamente quase sem esforço, precisando apenas manter clareza sobre os fatos imediatos.</p>
+      <div class="body" id="b10" hidden>
+        <h3 class="en">Mercury Trine Neptune (Chapter 7)</h3>
+        <p>Mercury trine Neptune in a composite chart provides for a highly developed sensitivity toward each other and the ability to communicate nonverbally and intuitively. The two of you will have to say less to each other than most couples do, for your minds seem to operate in an instinctive harmony. You know what the other feels even if you are apart.</p>
+        <p>In addition, you are idealistic about your relationship, so that it appears to you more beautiful than others think it is. This is not a romantic idealism, but idealism based on intellectual and mental harmony. You may be realistic about each other's foibles, but you share an ideal of how things ought to be, which is one of the factors that keeps you together. The experience of this relationship may stimulate your poetic tendencies. Both of you will look at the world with heightened sensitivity and awareness. The only warning that is necessary with this configuration is to keep in mind the truth as it is at the moment. Do not confuse your ideals with present reality, but keep them in mind as a goal to work toward. If you do this, the effects of this aspect will be very beneficial in the long run.</p>
+      </div>
+    </article>
+
+    <article class="card" data-sec="Aspectos de Mercúrio" data-q="mercury sextile pluto chapter 7 mercurio sextil plutao insight hidden forces transforming rational mind intellectual bond benefit sintese confere perspicacia investigativa e lucidez para debater temas tabus ou questoes psicologicas profundas tornando o dialogo um instrumento de cura e entendimento real da dinamica da relacao" id="c11">
+      <button class="head" aria-expanded="false" aria-controls="b11">
+        <span class="glyph" aria-hidden="true">☿</span>
+        <span class="titles"><span class="pt">Mercúrio Sextil Plutão</span><span class="tag t-flow">⚹ Sextil</span></span>
+        <span class="chev" aria-hidden="true"></span>
+      </button>
+      <p class="synth">Confere perspicácia investigativa e lucidez para debater temas tabus ou questões psicológicas profundas, tornando o diálogo um instrumento de cura e entendimento real da dinâmica da relação.</p>
+      <div class="body" id="b11" hidden>
+        <h3 class="en">Mercury Sextile Pluto (Chapter 7)</h3>
+        <p>Mercury sextile Pluto in the composite chart provides the two of you with deep psychological insight and a grasp of the normally hidden forces that operate within a relationship. Mercury rules the rational mind, while Pluto has to do with hidden transforming forces. The sextile gives a rational understanding of these hidden forces, so that the two of you can actually deal with them on a rational level, instead of simply feeling their effects and not knowing how to handle them.</p>
+        <p>At the same time, and partly because of this quality, this relationship will change your ways of thinking about life; through it you will experience different aspects of human psychology that you may not have encountered before and therefore have not understood. This experience is not likely to damage either of you, and you will probably derive great benefit from the new understandings.</p>
+        <p>This aspect is an indication that the two of you will forge an intellectual bond that will bind you together in a creative way for some time. Even at the worst, this aspect will enable you both to benefit from the relationship, even though you may not recognize it immediately.</p>
+      </div>
+    </article>
+
+  </section>
+
+  <!-- 4. ASPECTOS DE VÊNUS -->
+  <section class="group" data-sec="Aspectos de Vênus"><h2 id="s-venus">Aspectos de Vênus</h2>
+
+    <article class="card" data-sec="Aspectos de Vênus" data-q="venus square ascendant chapter 8 venus quadratura ascendente loving relationship home refuge comfort art decor food past public sintese indica afeto genuino e acolhedor direciona a energia amorosa para o lar e a intimidade criando um ambiente de refugio conforto e apreco estetico que ancora o casal" id="c12">
+      <button class="head" aria-expanded="false" aria-controls="b12">
+        <span class="glyph" aria-hidden="true">♀</span>
+        <span class="titles"><span class="pt">Vênus Quadratura Ascendente</span><span class="tag t-tension">□ Quadratura</span></span>
+        <span class="chev" aria-hidden="true"></span>
+      </button>
+      <p class="synth">Indica afeto genuíno e acolhedor. Direciona a energia amorosa para o lar e a intimidade, criando um ambiente de refúgio, conforto e apreço estético que ancora o casal.</p>
+      <div class="body" id="b12" hidden>
+        <h3 class="en">Venus Square Ascendant (Chapter 8)</h3>
+        <p>The square of composite Venus and Ascendant is not a difficult square. On the contrary, it is a very beneficial aspect in a composite chart. This Venus-Ascendant aspect is a sign of a deeply loving relationship.</p>
+        <p>This combination will manifest itself particularly in your home. If this is a relationship in which you have a home together, it will be an expression of your feelings for each other. It will be a place where the two of you can retire from the outside world, not as an escape but as a refuge where you can prepare yourselves for the next day. You will do everything you can to make your home pleasant and comfortable, with beautiful art and decor, comfortable furniture, and good food. And these comforts are not simply an indulgence, but an honest expression of your desires to make each other feel as comfortable as possible.</p>
+        <p>Sometimes the energy of this square operates outside the home as well. Instead of expressing itself in your personal world, your home, this energy may be expressed through your social and public lives. Instead of keeping your love to yourselves, you may make your relationship very public and open, so that others will sit up and take notice of two people who feel strongly about each other.</p>
+        <p>In a professional relationship this aspect can mean that you are engaged in an occupation related to art and beauty or the entertainment industry.</p>
+        <p>In a relationship that has no clearly identifiable home, this aspect means that the two of you feel that your love for each other comes from a strong similarity in your pasts. Many elements of your lives before you met have given you something in common, and this binds you together.</p>
+      </div>
+    </article>
+
+    <article class="card" data-sec="Aspectos de Vênus" data-q="venus sextile uranus chapter 8 venus sextil urano free open expression unconventional friendship love affair rules flow sintese renova o carinho constantemente e evita a estagnacao permite que o amor conviva harmoniosamente com a liberdade pessoal e o respeito ao espaco de cada um combinando amor e amizade" id="c13">
+      <button class="head" aria-expanded="false" aria-controls="b13">
+        <span class="glyph" aria-hidden="true">♀</span>
+        <span class="titles"><span class="pt">Vênus Sextil Urano</span><span class="tag t-flow">⚹ Sextil</span></span>
+        <span class="chev" aria-hidden="true"></span>
+      </button>
+      <p class="synth">Renova o carinho constantemente e evita a estagnação. Permite que o amor conviva harmoniosamente com a liberdade pessoal e o respeito ao espaço de cada um, combinando amor e amizade.</p>
+      <div class="body" id="b13" hidden>
+        <h3 class="en">Venus Sextile Uranus (Chapter 8)</h3>
+        <p>The sextile of Venus and Uranus in the composite chart indicates a relationship that is very free and open in its expression. You each have freedom to be yourselves, and you will not consider your partner to be your property. Probably you will reach some unconventional arrangement with each other, an arrangement that others may think very unusual. And it will be, but it will express what you want, no matter what others think.</p>
+        <p>At the same time, this relationship will change your thinking, for the experience of it will cause both of you to regard the world in a new light. This in itself will make you reluctant to follow any particular set of rules except those that you set up for yourselves. Even the usual categories, such as friendships or love affairs (regardless of your sex), will not be followed in the usual way at all. If it is a love affair it will also be a friendship.</p>
+        <p>Let yourselves flow with the tide of events in this relationship. If you let it establish its own patterns, you should find it quite good.</p>
+      </div>
+    </article>
+
+    <article class="card" data-sec="Aspectos de Vênus" data-q="venus conjunct south node opposition north node chapter 15 venus conjuncao nodo sul oposicao nodo norte unconscious love union friendship sintese marca uma atracao com forte sensacao de familiaridade previa e lacos que operam em camadas inconscientes sustentando um ambiente afetuoso e acolhedor" id="c14">
+      <button class="head" aria-expanded="false" aria-controls="b14">
+        <span class="glyph" aria-hidden="true">♀</span>
+        <span class="titles"><span class="pt">Vênus Conjunção Nodo Sul / Oposição Nodo Norte</span><span class="tag t-focus">☌ Conjunção / ☍ Oposição</span></span>
+        <span class="chev" aria-hidden="true"></span>
+      </button>
+      <p class="synth">Marca uma atração com forte sensação de familiaridade prévia e laços que operam em camadas inconscientes, sustentando um ambiente afetuoso e acolhedor.</p>
+      <div class="body" id="b14" hidden>
+        <h3 class="en">Venus Conjunct South Node Opposition North Node (Chapter 15)</h3>
+        <p>The forces that have brought you together are mostly unconscious, but that is not likely to lessen the benefits of the Venus-node combination. This is still a positive aspect.</p>
+        <p><em>(See general reference:</em> <strong>Venus-Node Aspects:</strong> <em>All these aspects signify a love union, and none is especially difficult. Friendships with this aspect will be very loving even though not sexually based.)</em></p>
+      </div>
+    </article>
+
+  </section>
+
+  <!-- 5. ASPECTOS DE MARTE -->
+  <section class="group" data-sec="Aspectos de Marte"><h2 id="s-marte">Aspectos de Marte</h2>
+
+    <article class="card" data-sec="Aspectos de Marte" data-q="mars sextile jupiter chapter 9 marte sextil jupiter ego drives harmonious fortunate action objectives optimism friends lovers successful sintese traz sincronia e boa vontade nas acoes cotidianas o casal une suas forcas com entusiasmo facilidade para atingir metas e habilidade de incentivar o progresso mutuo sem disputas egoistas" id="c15">
+      <button class="head" aria-expanded="false" aria-controls="b15">
+        <span class="glyph" aria-hidden="true">♂</span>
+        <span class="titles"><span class="pt">Marte Sextil Júpiter</span><span class="tag t-flow">⚹ Sextil</span></span>
+        <span class="chev" aria-hidden="true"></span>
+      </button>
+      <p class="synth">Traz sincronia e boa vontade nas ações cotidianas. O casal une suas forças com entusiasmo, facilidade para atingir metas e habilidade de incentivar o progresso mútuo sem disputas egoístas.</p>
+      <div class="body" id="b15" hidden>
+        <h3 class="en">Mars Sextile Jupiter (Chapter 9)</h3>
+        <p>Mars sextile Jupiter in the composite chart is a good indication that your ego drives are harmoniously related within the relationship. That is, each of you can do what you want and be what you want without getting in the way of your relationship. In fact, this aspect usually signifies that being together helps you both to be yourselves and do what you want.</p>
+        <p>The symbolism of the Mars-Jupiter combination is fortunate action. You work well together, think well together, and have the happy facility of wanting the same things at the same time or of seeking objectives that you can pursue together. And all these activities cement your relationship. If you are friends, this aspect will help you to be good friends. If you are lovers, you will also be friends, which is quite unusual in a love affair.</p>
+        <p>This aspect confers a rare quality of optimism on a relationship. You expect things to work, and that expectation somehow makes it happen. As a couple you will set high goals for yourselves, and they will be within your grasp. Sometimes the effort you expend, although real, will not even be apparent. It simply comes so easily that you are not aware of the effort at the time. This aspect can be instrumental in making a relationship successful, regardless of its purpose.</p>
+      </div>
+    </article>
+
+    <article class="card" data-sec="Aspectos de Marte" data-q="mars opposition ascendant descendant chapter 9 marte oposicao ascendente descendente intimate contest goad disrupt hostile energy hostility task purpose sintese mars posicionado proximo a cuspide da casa 7 descendente confere muita voltagem ao encontro direto entre os parceiros e fundamental direcionar a energia assertiva para atividades e metas externas conjuntas do contrario essa forca tende a se converter em confrontos diretos ou provocacoes mutuas dentro do relacionamento" id="c16">
+      <button class="head" aria-expanded="false" aria-controls="b16">
+        <span class="glyph" aria-hidden="true">♂</span>
+        <span class="titles"><span class="pt">Marte Oposição Ascendente</span><span class="tag t-tension">☍ Oposição</span></span>
+        <span class="chev" aria-hidden="true"></span>
+      </button>
+      <p class="synth">Mars posicionado próximo à cúspide da Casa 7 (Descendente) confere muita voltagem ao encontro direto entre os parceiros. É fundamental direcionar a energia assertiva para atividades e metas externas conjuntas; do contrário, essa força tende a se converter em confrontos diretos ou provocações mútuas dentro do relacionamento.</p>
+      <div class="body" id="b16" hidden>
+        <h3 class="en">Mars Opposition Ascendant (Chapter 9)</h3>
+        <p>The opposition of composite Mars and Ascendant is equivalent to a conjunction of Mars and the composite Descendant. This aspect has two distinct possibilities, either of which you may experience in your own relationship. This can be a very perfect union of your individual energies in a creative working relationship, or it can be an endless contest between you, as if you were together only to challenge and goad each other.</p>
+        <p>In any case, you can be sure that the two of you form an intimate unit. The only question is whether the union is a destructive or a creative one. One point is clear; it is vital that you direct your energies toward accomplishing a task or purpose outside of the relationship. If you are not engaged in some activity together, the energies of Mars are likely to become disruptive rather than creative. If not expressed outwardly, the energies will turn inward, into the relationship.</p>
+        <p>Even if you succeed in turning the Mars force outward, you may have to deal with another danger if you are not careful. You may experience hostility from people outside your relationship. In part this is because of the strong energies that you put into the world, often without understanding them. If the two of you find that others are opposed to you either as a couple or as individuals, you should consider carefully what you may be contributing to the problem. Of course, it may be that others are hostile simply because you are honestly being yourselves. In that case, you can't do much about it. But if you are actively contributing to the hostility, maybe the situation can be changed.</p>
+      </div>
+    </article>
+
+  </section>
+
+  <p class="empty" id="empty">Nada encontrado. Tente outro termo.</p>
+</main>
+
+<div class="fab ui">
+  <button id="toggleAll" aria-label="Abrir todos os textos">⇕</button>
+  <button id="top" aria-label="Voltar ao topo">↑</button>
+</div>
+
+<script>
+const cards = [...document.querySelectorAll('.card')];
+const groups = [...document.querySelectorAll('.group')];
+const q = document.getElementById('q');
+const clear = document.getElementById('clear');
+const count = document.getElementById('count');
+let filter = '*';
+
+const norm = s => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+
+cards.forEach(c => {
+  const head = c.querySelector('.head');
+  const body = c.querySelector('.body');
+  head.addEventListener('click', () => {
+    const open = c.classList.toggle('open');
+    body.hidden = !open;
+    head.setAttribute('aria-expanded', open);
+  });
+});
+
+function unmark(el) {
+  el.querySelectorAll('mark').forEach(m => { m.replaceWith(m.textContent); });
+  el.normalize();
+}
+
+function mark(el, term) {
+  const w = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+  const hits = [];
+  while (w.nextNode()) {
+    const n = w.currentNode;
+    if (norm(n.nodeValue).includes(term)) hits.push(n);
+  }
+  hits.forEach(n => {
+    const t = n.nodeValue;
+    const nt = norm(t);
+    const frag = document.createDocumentFragment();
+    let i = 0, j;
+    while ((j = nt.indexOf(term, i)) > -1) {
+      frag.append(t.slice(i, j));
+      const m = document.createElement('mark');
+      m.textContent = t.slice(j, j + term.length);
+      frag.append(m);
+      i = j + term.length;
+    }
+    frag.append(t.slice(i));
+    n.replaceWith(frag);
+  });
+}
+
+function apply() {
+  const term = norm(q.value.trim());
+  clear.style.display = q.value ? 'block' : 'none';
+  let n = 0;
+
+  cards.forEach(c => {
+    const okSec = filter === '*' || c.dataset.sec === filter;
+    const okQ = !term || c.dataset.q.includes(term);
+    const show = okSec && okQ;
+    c.style.display = show ? '' : 'none';
+    if (show) n++;
+    unmark(c);
+
+    if (show && term) {
+      mark(c.querySelector('.titles'), term);
+      mark(c.querySelector('.synth'), term);
+      mark(c.querySelector('.body'), term);
+      if (!c.classList.contains('open') && norm(c.querySelector('.body').textContent).includes(term)) {
+        c.classList.add('open');
+        c.querySelector('.body').hidden = false;
+        c.querySelector('.head').setAttribute('aria-expanded', true);
+      }
+    }
+  });
+
+  groups.forEach(g => {
+    g.style.display = [...g.querySelectorAll('.card')].some(c => c.style.display !== 'none') ? '' : 'none';
+  });
+
+  document.getElementById('empty').style.display = n ? 'none' : 'block';
+  count.textContent = n + (n === 1 ? ' aspecto' : ' aspectos');
+}
+
+q.addEventListener('input', apply);
+clear.addEventListener('click', () => { q.value = ''; apply(); q.focus(); });
+
+document.querySelectorAll('.chip').forEach(ch => ch.addEventListener('click', () => {
+  document.querySelectorAll('.chip').forEach(x => x.classList.remove('on'));
+  ch.classList.add('on');
+  filter = ch.dataset.f;
+  apply();
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}));
+
+document.getElementById('top').addEventListener('click', () => window.scrollTo({ top: 0, behavior: 'smooth' }));
+
+document.getElementById('toggleAll').addEventListener('click', () => {
+  const vis = cards.filter(c => c.style.display !== 'none');
+  const openAll = !vis.every(c => c.classList.contains('open'));
+  vis.forEach(c => {
+    c.classList.toggle('open', openAll);
+    c.querySelector('.body').hidden = !openAll;
+    c.querySelector('.head').setAttribute('aria-expanded', openAll);
+  });
+});
+
+let fs = 17;
+document.getElementById('plus').onclick = () => { fs = Math.min(23, fs + 1); document.documentElement.style.setProperty('--fs', fs + 'px'); };
+document.getElementById('minus').onclick = () => { fs = Math.max(14, fs - 1); document.documentElement.style.setProperty('--fs', fs + 'px'); };
+
+apply();
+</script>
+</body>
+</html>
