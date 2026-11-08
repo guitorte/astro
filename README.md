@@ -112,11 +112,18 @@ When all anchor events are of the same type (e.g. all `career_peak`), the scorin
 systematically favors whichever birth time best fits that house axis — regardless of
 the true birth time. This is the single most important failure mode.
 
-**Neymar Jr. (5 Feb 1992, Mogi das Cruzes, actual ~02:15):** with 5 career peaks and
-2 injury events, the system converged on Aquarius 05:11 rather than Sagittarius 02:15.
-Per-event analysis showed career events scored 31 points higher at 05:11, but the
-non-career events were nearly even. A balanced event set with family, legal, and
-relocation events would provide the missing signal.
+**Neymar Jr. (5 Feb 1992, Mogi das Cruzes, 02:15 local summer time = UTC−2, ASC 13°53′ Sag):**
+with 5 career peaks and 2 injury events the engine converges on a moment around 08:10 UT
+(05:10 if the clock is read as UTC−3, 06:10 as UTC−2), not the real 04:15 UT.
+
+> **Correction (timezone).** Earlier versions of the calibration fixture used UTC−3.
+> Brazil was on summer time from 20 Oct 1991 to 9 Feb 1992, so the correct offset is
+> UTC−2 (it reproduces the published ASC 13°53′ Sagittarius; UTC−3 gives ~28° Sag).
+> With UTC−3 the test was scoring a moment one hour away from the real birth, and the
+> "confirmed time scores ≥ 30% of the top" check passed by accident. With the correct
+> offset the real moment ranks ~76/96 at 15-min resolution and scores ~16% of the top
+> candidate. That test is now marked `xfail(strict=True)` until the scoring improves.
+> The failure is in the scoring model, not the data entry.
 
 **Rule of thumb:** include at least 3 distinct event types and keep no single type above
 50% of the anchor set.
@@ -199,8 +206,9 @@ Extracts hard-dated life events from biography text via Claude API
 pytest tests/ -v
 ```
 
-104 tests covering: ephemeris calculations, all 5 scoring techniques, Morin filter,
-4-loop rectifier, and FastAPI endpoints.
+130 tests (plus 1 documented expected failure) covering: ephemeris calculations, all 5
+scoring techniques, Morin filter, 4-loop rectifier, FastAPI endpoints, and regression
+tests for the timing fixes in `tests/test_timing_fixes.py`.
 
 ---
 

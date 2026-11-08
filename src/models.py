@@ -102,6 +102,9 @@ class CandidateChart(BaseModel):
     house_system: HouseSystem
     planets: dict[str, float] = Field(default_factory=dict)           # name → ecliptic longitude
     planet_latitudes: dict[str, float] = Field(default_factory=dict)  # name → ecliptic latitude
+    # Geographic latitude of the birthplace. Needed for oblique ascension (primary
+    # directions to ASC/DSC) and for progressed angles. None = unknown (legacy callers).
+    geo_latitude: float | None = None
 
     @property
     def dsc(self) -> float:

@@ -54,7 +54,8 @@ class SolarArcScorer(BaseScorer):
         if self.use_naibod:
             arc = age * NAIBOD_RATE
         else:
-            arc = solar_arc_for_age(natal_jd, age)
+            # True solar arc from the candidate's own birth moment.
+            arc = solar_arc_for_age(candidate.julian_day, age)
 
         angles = get_angles(candidate)
 
