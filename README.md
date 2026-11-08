@@ -41,7 +41,7 @@ giving Sagittarius rising appropriate probability mass (calibrated via Neymar te
 Generates the filtered candidate grid at 15-minute intervals, scores every candidate
 against all anchor events using all five techniques, then applies a Bayesian update
 combining the Morin prior with the likelihood scores. Repeats if the top candidate's
-posterior ratio is below 3×.
+posterior ratio is below 3×. Also runs the chance-level test (see Quality Flags).
 
 ### Loop 2 — Narrow Pass (1-min resolution)
 Re-scores ±30 minutes around the Loop 1 winner at 1-minute resolution with tighter
@@ -98,14 +98,41 @@ Every result carries explicit quality indicators:
   rate < 80%, or fewer than 4 anchor events.
 - **`uncertainty_minutes`**: 5 min (≥8 events, stable bootstrap), 15 min (≥4 events),
   or 30 min (sparse data).
-- **`house_system_consensus`**: 0–4. Below 3 is a warning; 0 means the problem is
-  underdetermined and no reliable time can be output.
+- **`chance_p_value`**: does the event list fit this native better than it fits
+  unrelated people? The best score over the whole day for the real birth date is
+  ranked against the same statistic for 30 other birth dates at the same place
+  (shifted 1–15 years). If p > 0.05 the result is **UNDERDETERMINED**: the top time is
+  kept for inspection, but `confidence_score` is 0 and `uncertainty_minutes` is 720.
+- **`house_system_consensus`**: 0–4. Below 3 is a warning. It is only a necessary
+  condition: ASC and MC, which drive primary directions and solar arcs, are identical
+  in every house system, so 4/4 is close to automatic and is never treated as
+  independent evidence.
 - **Event diversity warning**: if >60% of events share the same type (e.g. all career
   peaks), the system warns of systematic house bias in the scoring output.
 
 ---
 
 ## Known Limitations & Calibration Notes
+
+### Current measured performance (benchmark)
+`python -m eval.benchmark --cases 12 --natives 30` plants up to 8 events on dates when
+a solar-arc-directed natal planet exactly reaches a natal angle of a synthetic chart,
+then asks the engine to find that chart. Result on the 15-minute grid:
+
+| Measure | Result | Target |
+|---|---|---|
+| False-positive rate on random event lists | 1–2 of 12 | about 5% |
+| Power on planted event lists (p ≤ 0.05) | 0 of 12 | high |
+| True time ranked first | 0 of 12 (median rank 23/96) | most cases |
+
+So today the engine cannot tell a chart from unrelated charts **even when the events
+were built to fit it**. The cause is saturation: each candidate offers roughly 140
+direction targets (10 planets × 4 angles × direct/converse, angles → planets, cusps),
+spread over about 110° of arc, with orbs of 1–2 years. Nearly any date hits several of
+them, for nearly any candidate. Each event therefore carries almost no information.
+Any scoring change should be judged on this benchmark first; the two celebrity charts
+are too few to separate a better model from a lucky one.
+
 
 ### Homogeneous event set bias (Neymar calibration test)
 When all anchor events are of the same type (e.g. all `career_peak`), the scoring
@@ -206,9 +233,10 @@ Extracts hard-dated life events from biography text via Claude API
 pytest tests/ -v
 ```
 
-130 tests (plus 1 documented expected failure) covering: ephemeris calculations, all 5
+135 tests (plus 1 documented expected failure) covering: ephemeris calculations, all 5
 scoring techniques, Morin filter, 4-loop rectifier, FastAPI endpoints, and regression
-tests for the timing fixes in `tests/test_timing_fixes.py`.
+tests for the timing fixes in `tests/test_timing_fixes.py` and the chance-level gate
+in `tests/test_chance_level.py`.
 
 ---
 

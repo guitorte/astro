@@ -170,6 +170,9 @@ class RectificationResult(BaseModel):
     evidence_ledger: list[TechniqueScore]
     ranked_candidates: list[CandidateScore] = Field(default_factory=list)
     notes: str = ""
+    # Global p-value of the chance-level test (None if not run). Small = the real
+    # event dates fit the best candidate better than random dates would.
+    chance_p_value: float | None = None
 
     def time_label(self) -> str:
         h, m = divmod(self.rectified_time_minutes, 60)
