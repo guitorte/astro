@@ -239,18 +239,14 @@ def progressed_angles(
     house_system: str = "P",
 ) -> tuple[float, float]:
     """
-    Progressed ASC and MC by the solar-arc-in-right-ascension method.
-
-    The natal ARMC is advanced by the RA arc travelled by the secondary-progressed
-    Sun; the progressed ASC is then the ascendant of that ARMC at the birth latitude.
+    Progressed ASC and MC by the solar arc method described in Tebbs, "The Complete
+    Book of Chart Rectification", appendices B and C: the progressed MC is the natal
+    MC plus the solar arc in longitude, and the progressed ASC is the ascendant that
+    the tables of houses give for that MC at the birth latitude.
     natal_jd must be the candidate's own birth moment (not a noon placeholder).
     """
     eps = true_obliquity(natal_jd)
-    sun_n, _ = swe.calc_ut(natal_jd, swe.SUN, MOSHIER_FLAG)
-    sun_p, _ = swe.calc_ut(natal_jd + age_years, swe.SUN, MOSHIER_FLAG)
-    ra_n = ecliptic_to_equatorial(sun_n[0], sun_n[1], eps)[0]
-    ra_p = ecliptic_to_equatorial(sun_p[0], sun_p[1], eps)[0]
-    ra_arc = (ra_p - ra_n) % 360
-    prog_armc = (armc_from_mc(natal_mc, eps) + ra_arc) % 360
+    prog_mc = (natal_mc + solar_arc_for_age(natal_jd, age_years)) % 360
+    prog_armc = armc_from_mc(prog_mc, eps)
     _, ascmc = swe.houses_armc(prog_armc, geo_lat, eps, house_system.encode())
-    return ascmc[0], ascmc[1]
+    return ascmc[0], prog_mc

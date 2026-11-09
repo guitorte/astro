@@ -24,6 +24,7 @@ from .scoring import (
     TransitScorer, ProgressionScorer, SolarArcScorer,
     ProfectionScorer, PrimaryDirectionScorer,
 )
+from .scoring.angle_first import AngleFirstScorer, AngleFirstConfig
 from .morin_filter import build_morin_prior, uniform_prior
 
 
@@ -47,8 +48,38 @@ NULL_SHIFT_YEARS = (1.0, 15.0)
 CHANCE_ALPHA = 0.05
 
 
-def build_scorers(tight: bool = False) -> list:
-    """Return all 5 scoring technique instances in weighted order."""
+# Scoring method. "angle_first" follows Tebbs (angles only, solar arc first, 1° orb);
+# "classic" is the original five-technique sum, kept for comparison.
+DEFAULT_METHOD = "angle_first"
+# Solar arcs lead. Transits and progressions count only on top of a solar arc
+# contact for the same event, at half weight ("confirm" mode). Measured on synthetic
+# charts this was level with solar arc alone and better than letting them score
+# independently (see README).
+ANGLE_FIRST_CONFIG = AngleFirstConfig(mode="confirm", transit_weight=0.5, progression_weight=0.5)
+# The chance-level test compares natives with each other, and transits are the same
+# sky for every native: they lift everyone's best score and blur the comparison.
+# With solar arc alone the real chart beat all controls in 11 of 16 planted cases,
+# against 8 of 16 with confirmations included.
+ANGLE_FIRST_GATE_CONFIG = AngleFirstConfig(mode="sa_only")
+# Loop 1 grid per method. Two minutes of clock time is about 0.5° of MC, half the
+# 1° orb of the angle-first scorer, so a true time between grid points keeps at least
+# three quarters of its score. (At 4 minutes the chance-level test found only 6 of 20
+# planted charts; the classic 15 minutes is 3.75°, wider than its own 2° orb.)
+LOOP1_INTERVAL = {"angle_first": 2, "classic": 15}
+# Softmax temperature per method. Angle-first scores are small (at most 2 per
+# ordinary event), so the temperature is set where the largest Morin prior ratio
+# (about 9 to 1) is worth roughly one exact contact: the prior can break ties but
+# cannot overrule the events.
+TEMPERATURE = {"angle_first": 0.5, "classic": 5.0}
+
+
+def build_scorers(tight: bool = False, method: str | None = None) -> list:
+    """Return the scorer instances for a method (default: DEFAULT_METHOD)."""
+    method = method or DEFAULT_METHOD
+    if method == "angle_first":
+        return [AngleFirstScorer(tight=tight, config=ANGLE_FIRST_CONFIG)]
+    if method != "classic":
+        raise ValueError(f"unknown scoring method: {method}")
     return [
         PrimaryDirectionScorer(tight=tight),   # weight 2.0 — most independent
         ProgressionScorer(tight=tight),         # weight 1.5 — progressed Moon
@@ -268,9 +299,10 @@ def chance_level_test(
     birth_data: BirthData,
     events: list[LifeEvent],
     house_system: HouseSystem = HouseSystem.PLACIDUS,
-    interval_minutes: int = 15,
+    interval_minutes: int | None = None,
     n_natives: int = N_NULL_NATIVES,
     seed: int = 0,
+    method: str | None = None,
 ) -> tuple[float, float, list[float]]:
     """
     Does this event list fit this birth date better than it fits unrelated people?
@@ -298,7 +330,13 @@ def chance_level_test(
     if not anchors:
         return 1.0, 0.0, []
 
-    scorers = build_scorers(tight=False)
+    method = method or DEFAULT_METHOD
+    if interval_minutes is None:
+        interval_minutes = LOOP1_INTERVAL[method]
+    if method == "angle_first":
+        scorers = [AngleFirstScorer(config=ANGLE_FIRST_GATE_CONFIG)]
+    else:
+        scorers = build_scorers(tight=False, method=method)
 
     def best_score(bd) -> float:
         evs = [e for e in anchors if e.date > bd]
@@ -333,19 +371,23 @@ def best_unfiltered_candidate(
     birth_data: BirthData,
     events: list[LifeEvent],
     house_system: HouseSystem = HouseSystem.PLACIDUS,
-    interval_minutes: int = 15,
+    interval_minutes: int | None = None,
+    method: str | None = None,
 ) -> CandidateChart | None:
     """Best-scoring candidate over the whole day, ignoring the Morin filter."""
     anchors = [e for e in events if not e.held_out]
     if not anchors:
         return None
+    method = method or DEFAULT_METHOD
+    if interval_minutes is None:
+        interval_minutes = LOOP1_INTERVAL[method]
     jd = birth_to_jd(birth_data.birth_date, 720, birth_data.timezone_offset)
     cands = generate_candidate_grid(
         birth_data.birth_date, birth_data.latitude, birth_data.longitude,
         birth_data.timezone_offset, interval_minutes=interval_minutes,
         house_system=house_system,
     )
-    scorers = build_scorers(tight=False)
+    scorers = build_scorers(tight=False, method=method)
     return max(cands, key=lambda c: score_candidate(c, anchors, jd, scorers).training_score())
 
 
@@ -364,10 +406,14 @@ class Rectifier:
         events: list[LifeEvent],
         morin_prior: RisingSignPrior | None = None,
         verbose: bool = False,
+        method: str | None = None,
     ):
         self.birth_data = birth_data
         self.events = events
         self.verbose = verbose
+        self.method = method or DEFAULT_METHOD
+        if self.method not in LOOP1_INTERVAL:
+            raise ValueError(f"unknown scoring method: {self.method}")
 
         # Compute natal Julian Day at noon (time will be varied over candidates)
         self.natal_jd = birth_to_jd(
@@ -394,7 +440,7 @@ class Rectifier:
         the threshold is never scored, so a wrong biography reading cannot be
         corrected by the event evidence.
         """
-        best = best_unfiltered_candidate(self.birth_data, self.events)
+        best = best_unfiltered_candidate(self.birth_data, self.events, method=self.method)
         if best is None:
             return ""
         sign = int(best.ascendant // 30) + 1
@@ -408,7 +454,17 @@ class Rectifier:
         )
 
     def loop0_morin_filter(self) -> list[int]:
-        """Return plausible rising signs (those above 5% threshold)."""
+        """
+        Return the rising signs to search.
+
+        classic: signs above the 5% prior threshold (a hard cut).
+        angle_first: all twelve. Judging the Ascendant from appearance or character
+        is one of the less reliable rectification methods (Tebbs, ch. 1), so the
+        Morin prior only weights candidates (see TEMPERATURE) and never removes them.
+        """
+        if self.method == "angle_first":
+            self._log("Loop 0 — Morin prior used as a weight only; all 12 rising signs searched")
+            return list(range(1, 13))
         signs = self.prior.top_signs(threshold=0.05)
         self._log(
             f"Loop 0 — Morin: {len(signs)} plausible rising signs: "
@@ -423,15 +479,17 @@ class Rectifier:
         self,
         rising_signs: list[int],
         house_system: HouseSystem = HouseSystem.PLACIDUS,
-        interval: int = 15,
+        interval: int | None = None,
         run_chance_test: bool = False,
     ) -> tuple[list[CandidateScore], list[CandidateChart]]:
         """
-        Generate 15-min candidate grid, score all events, Bayesian update.
+        Generate the broad candidate grid (LOOP1_INTERVAL), score all events, Bayesian update.
         With run_chance_test, also sets self.chance_p (see chance_level_test).
         Returns (ranked candidate scores, candidate charts).
         """
-        scorers = build_scorers(tight=False)
+        if interval is None:
+            interval = LOOP1_INTERVAL[self.method]
+        scorers = build_scorers(tight=False, method=self.method)
         candidates = generate_candidate_grid(
             self.birth_data.birth_date,
             self.birth_data.latitude,
@@ -449,13 +507,15 @@ class Rectifier:
             for c in candidates
         ]
 
-        candidate_scores = bayesian_update(candidate_scores, self.prior, candidates)
+        candidate_scores = bayesian_update(
+            candidate_scores, self.prior, candidates, temperature=TEMPERATURE[self.method]
+        )
         candidate_scores.sort(key=lambda cs: cs.posterior_probability, reverse=True)
 
         if run_chance_test and candidates:
             self.chance_p, real_best, _ = chance_level_test(
                 self.birth_data, self.events, house_system=house_system,
-                interval_minutes=interval,
+                interval_minutes=interval, method=self.method,
             )
             self._log(
                 f"  Chance-level test: p = {self.chance_p:.3f} "
@@ -490,7 +550,7 @@ class Rectifier:
         Re-score ±window_minutes around top candidate at 1-minute resolution.
         Uses tighter orbs and full event set.
         """
-        scorers = build_scorers(tight=True)
+        scorers = build_scorers(tight=True, method=self.method)
 
         # Build candidates in the narrow window
         low = max(0, top_time_minutes - window_minutes)
@@ -523,7 +583,9 @@ class Rectifier:
             for c in candidates
         ]
 
-        candidate_scores = bayesian_update(candidate_scores, self.prior, candidates)
+        candidate_scores = bayesian_update(
+            candidate_scores, self.prior, candidates, temperature=TEMPERATURE[self.method]
+        )
         candidate_scores.sort(key=lambda cs: cs.posterior_probability, reverse=True)
 
         if candidate_scores:
@@ -544,7 +606,12 @@ class Rectifier:
         """
         Re-run Loop 1 for all 4 house systems and check agreement.
         Returns (consensus_count, {house_system: top_time_minutes}).
+
+        The angle-first method scores only ASC and MC, which are the same in every
+        house system, so the check cannot disagree and is skipped (reported as 4).
         """
+        if self.method == "angle_first":
+            return 4, {}
         systems = [
             HouseSystem.PLACIDUS,
             HouseSystem.KOCH,
@@ -628,7 +695,7 @@ class Rectifier:
         cv_score = 0.0
         stability_cv = 1.0  # default: unstable until proven otherwise
         if matching_candidates:
-            scorers_tight = build_scorers(tight=True)
+            scorers_tight = build_scorers(tight=True, method=self.method)
             stability_cv = bootstrap_stability(
                 matching_candidates[0], self.events, self.natal_jd, scorers_tight
             )
@@ -729,7 +796,7 @@ class Rectifier:
             house_system_consensus=consensus,
             is_provisional=True,
             evidence_ledger=[],
-            chance_p_value=self.chance_p,
+            chance_p_value=round(self.chance_p, 4) if self.chance_p is not None else None,
             notes=(
                 f"UNDERDETERMINED: cross-validation ratio {cv_score:.2f} is below the "
                 f"minimum threshold {CV_UNDERDETERMINED}. The scoring engine found a "
