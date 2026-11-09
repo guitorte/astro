@@ -58,3 +58,29 @@ def test_significant_result_keeps_a_time(birth, events, monkeypatch):
     result = R.Rectifier(birth, events, morin_prior=uniform_prior()).rectify()
     assert result.chance_p_value == 0.01
     assert "chance level" not in result.notes
+
+
+def test_later_born_controls_never_drop_events(birth, events, monkeypatch):
+    """Every control native must be born at least a year before the first event."""
+    seen = []
+    real_grid = R.generate_candidate_grid
+
+    def spy(bd, *a, **k):
+        seen.append(bd)
+        return real_grid(bd, *a, **k)
+
+    monkeypatch.setattr(R, "generate_candidate_grid", spy)
+    young = birth.model_copy(update={"birth_date": date(1995, 3, 10)})  # first event at age 6
+    R.chance_level_test(young, events, n_natives=12, seed=3)
+    first_event = min(e.date for e in events)
+    assert len(seen) == 13
+    assert all((first_event - bd).days >= 365 for bd in seen[1:])
+
+
+def test_morin_warning_when_best_time_is_in_an_excluded_sign(birth, events):
+    rect = R.Rectifier(birth, events, morin_prior=uniform_prior())
+    best = R.best_unfiltered_candidate(birth, events)
+    sign = int(best.ascendant // 30) + 1
+    assert rect.morin_exclusion_warning([sign]) == ""
+    others = [s for s in range(1, 13) if s != sign]
+    assert "MORIN FILTER WARNING" in rect.morin_exclusion_warning(others)

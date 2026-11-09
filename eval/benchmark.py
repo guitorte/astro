@@ -20,6 +20,11 @@ birth dates at the same place):
   recovery              rank of the true time on the candidate grid for the
                         planted lists (1 = found)
 
+The true birth minute is random, so it usually falls between the points of the
+candidate grid; with --interval 15 that alone hides much of the signal (see the
+README). The planted events exercise solar arcs only, so this is a floor for
+the engine, not a model of a real life.
+
 Any change to the scoring should be judged here before it is judged on a
 celebrity chart: two calibration charts cannot separate a better model from a
 lucky one.

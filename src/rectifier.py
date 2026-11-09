@@ -280,7 +280,11 @@ def chance_level_test(
     the real birth date and for `n_natives` other birth dates at the same place,
     each shifted by a random 1–15 years either way. If the events carry no timing
     information about this native, the real birth date is just one more member of
-    that field, so its rank gives a valid p-value by construction.
+    that field, so its rank works as a p-value. The controls are only approximately
+    exchangeable with the real native (other eras have other outer-planet
+    positions), so calibration is checked empirically: on 70 random event lists,
+    3 reached p ≤ 0.05 (4%). With 30 controls the smallest possible p is 1/31, so
+    passing the 0.05 gate means beating every control.
 
     Why not shift the event dates instead? Those controls all orbit the real
     dates, so the real set is not exchangeable with them; in a benchmark on
@@ -311,12 +315,38 @@ def chance_level_test(
     rng = np.random.default_rng(seed)
     lo, hi = NULL_SHIFT_YEARS
     real = best_score(birth_data.birth_date)
+    first_event = min(e.date for e in anchors)
     null = []
     for _ in range(n_natives):
         days = int(rng.choice([-1, 1]) * rng.uniform(lo * 365.25, hi * 365.25))
+        # A later-born control must still be alive for every event; otherwise it
+        # is scored on fewer events than the real native and the comparison is
+        # tilted in the real native's favour. Flip such shifts to an earlier birth.
+        if birth_data.birth_date + timedelta(days=days) >= first_event - timedelta(days=365):
+            days = -abs(days)
         null.append(best_score(birth_data.birth_date + timedelta(days=days)))
     p = (1 + sum(x >= real for x in null)) / (n_natives + 1)
     return float(p), float(real), null
+
+
+def best_unfiltered_candidate(
+    birth_data: BirthData,
+    events: list[LifeEvent],
+    house_system: HouseSystem = HouseSystem.PLACIDUS,
+    interval_minutes: int = 15,
+) -> CandidateChart | None:
+    """Best-scoring candidate over the whole day, ignoring the Morin filter."""
+    anchors = [e for e in events if not e.held_out]
+    if not anchors:
+        return None
+    jd = birth_to_jd(birth_data.birth_date, 720, birth_data.timezone_offset)
+    cands = generate_candidate_grid(
+        birth_data.birth_date, birth_data.latitude, birth_data.longitude,
+        birth_data.timezone_offset, interval_minutes=interval_minutes,
+        house_system=house_system,
+    )
+    scorers = build_scorers(tight=False)
+    return max(cands, key=lambda c: score_candidate(c, anchors, jd, scorers).training_score())
 
 
 class Rectifier:
@@ -357,6 +387,26 @@ class Rectifier:
     # ------------------------------------------------------------------
     # Loop 0: Morin pre-filter
     # ------------------------------------------------------------------
+    def morin_exclusion_warning(self, rising_signs: list[int]) -> str:
+        """
+        Warn when the best-scoring time of the whole day has a rising sign that the
+        Morin filter removed from the search. The filter is a hard cut: a sign below
+        the threshold is never scored, so a wrong biography reading cannot be
+        corrected by the event evidence.
+        """
+        best = best_unfiltered_candidate(self.birth_data, self.events)
+        if best is None:
+            return ""
+        sign = int(best.ascendant // 30) + 1
+        if sign in rising_signs:
+            return ""
+        h, m = divmod(best.time_minutes, 60)
+        return (
+            f"MORIN FILTER WARNING: the best-scoring time over the whole day is "
+            f"{h:02d}:{m:02d} (rising sign {sign}), but the Morin filter excluded that "
+            f"rising sign, so it was never considered. Re-run with a uniform prior to compare."
+        )
+
     def loop0_morin_filter(self) -> list[int]:
         """Return plausible rising signs (those above 5% threshold)."""
         signs = self.prior.top_signs(threshold=0.05)
@@ -603,6 +653,10 @@ class Rectifier:
                 cv_score=cv_score,
                 consensus=consensus,
             )
+
+        morin_warning = self.morin_exclusion_warning(rising_signs)
+        if morin_warning:
+            diversity_warning = (diversity_warning + " " + morin_warning).strip()
 
         chance_p = self.chance_p if self.chance_p is not None else 1.0
         if chance_p > CHANCE_ALPHA:
