@@ -15,7 +15,7 @@ is applied so they don't count as fully independent witnesses.
 import swisseph as swe
 from ..models import CandidateChart, LifeEvent, TechniqueScore
 from .base import BaseScorer, angle_diff, orb_score, get_event_sensitive_points, cap_hits
-from ..ephemeris import secondary_progressed_jd, MOSHIER_FLAG
+from ..ephemeris import secondary_progressed_jd, progressed_angles, MOSHIER_FLAG
 
 # Partial correlation with solar arc → weight reduced to 1.5 (vs 2.0 for primaries)
 TECHNIQUE_WEIGHT = 1.5
@@ -53,7 +53,11 @@ class ProgressionScorer(BaseScorer):
         if age <= 0:
             return scores
 
-        prog_jd = secondary_progressed_jd(natal_jd, age)
+        # Progress from the candidate's own birth moment. natal_jd is a noon
+        # placeholder shared by every candidate; using it made the progressed Moon
+        # identical for all birth times (the Moon moves ~6.5° in 12 hours).
+        birth_moment_jd = candidate.julian_day
+        prog_jd = secondary_progressed_jd(birth_moment_jd, age)
 
         # --- Progressed Moon aspects to natal sensitive points ---
         prog_moon, _ = swe.calc_ut(prog_jd, swe.MOON, MOSHIER_FLAG)
@@ -106,8 +110,15 @@ class ProgressionScorer(BaseScorer):
                 break  # at most one ingress per event
 
         # --- Progressed ASC/MC aspects to natal planets --- (continued)
-        prog_asc_approx = (candidate.ascendant + age * 1.0) % 360  # rough arc
-        prog_mc_approx = (candidate.mc + age * 1.0) % 360
+        if candidate.geo_latitude is not None:
+            prog_asc_approx, prog_mc_approx = progressed_angles(
+                birth_moment_jd, candidate.mc, candidate.geo_latitude, age,
+                candidate.house_system.value,
+            )
+        else:
+            # Legacy fallback when the birthplace latitude is unknown.
+            prog_asc_approx = (candidate.ascendant + age * 1.0) % 360
+            prog_mc_approx = (candidate.mc + age * 1.0) % 360
 
         for planet_name, planet_lon in candidate.planets.items():
             for prog_angle_name, prog_angle_lon in [

@@ -39,6 +39,12 @@ CV_FLOOR = 0.80
 CV_UNDERDETERMINED = 0.20
 # Event diversity: if any single type exceeds this fraction, warn of homogeneity bias
 MAX_TYPE_FRACTION = 0.60
+# Chance-level test: the real birth date competes against N_NULL_NATIVES other
+# birth dates (same place, shifted by NULL_SHIFT_YEARS) on the same event list.
+# The result must rank in the top CHANCE_ALPHA of that field.
+N_NULL_NATIVES = 30
+NULL_SHIFT_YEARS = (1.0, 15.0)
+CHANCE_ALPHA = 0.05
 
 
 def build_scorers(tight: bool = False) -> list:
@@ -258,6 +264,91 @@ def cross_validate(
     return min(held_rate / train_rate, 2.0)
 
 
+def chance_level_test(
+    birth_data: BirthData,
+    events: list[LifeEvent],
+    house_system: HouseSystem = HouseSystem.PLACIDUS,
+    interval_minutes: int = 15,
+    n_natives: int = N_NULL_NATIVES,
+    seed: int = 0,
+) -> tuple[float, float, list[float]]:
+    """
+    Does this event list fit this birth date better than it fits unrelated people?
+
+    The statistic is the best candidate score over the whole day (every rising
+    sign, no Morin filter, so the comparison is like for like). It is computed for
+    the real birth date and for `n_natives` other birth dates at the same place,
+    each shifted by a random 1–15 years either way. If the events carry no timing
+    information about this native, the real birth date is just one more member of
+    that field, so its rank works as a p-value. The controls are only approximately
+    exchangeable with the real native (other eras have other outer-planet
+    positions), so calibration is checked empirically: on 70 random event lists,
+    3 reached p ≤ 0.05 (4%). With 30 controls the smallest possible p is 1/31, so
+    passing the 0.05 gate means beating every control.
+
+    Why not shift the event dates instead? Those controls all orbit the real
+    dates, so the real set is not exchangeable with them; in a benchmark on
+    random event lists that design flagged 35–40% of cases at p ≤ 0.05.
+
+    Returns (p_value, real_best_score, null_best_scores).
+    """
+    from datetime import timedelta
+
+    anchors = [e for e in events if not e.held_out]
+    if not anchors:
+        return 1.0, 0.0, []
+
+    scorers = build_scorers(tight=False)
+
+    def best_score(bd) -> float:
+        evs = [e for e in anchors if e.date > bd]
+        if not evs:
+            return 0.0
+        jd = birth_to_jd(bd, 720, birth_data.timezone_offset)
+        cands = generate_candidate_grid(
+            bd, birth_data.latitude, birth_data.longitude,
+            birth_data.timezone_offset, interval_minutes=interval_minutes,
+            house_system=house_system,
+        )
+        return max(score_candidate(c, evs, jd, scorers).training_score() for c in cands)
+
+    rng = np.random.default_rng(seed)
+    lo, hi = NULL_SHIFT_YEARS
+    real = best_score(birth_data.birth_date)
+    first_event = min(e.date for e in anchors)
+    null = []
+    for _ in range(n_natives):
+        days = int(rng.choice([-1, 1]) * rng.uniform(lo * 365.25, hi * 365.25))
+        # A later-born control must still be alive for every event; otherwise it
+        # is scored on fewer events than the real native and the comparison is
+        # tilted in the real native's favour. Flip such shifts to an earlier birth.
+        if birth_data.birth_date + timedelta(days=days) >= first_event - timedelta(days=365):
+            days = -abs(days)
+        null.append(best_score(birth_data.birth_date + timedelta(days=days)))
+    p = (1 + sum(x >= real for x in null)) / (n_natives + 1)
+    return float(p), float(real), null
+
+
+def best_unfiltered_candidate(
+    birth_data: BirthData,
+    events: list[LifeEvent],
+    house_system: HouseSystem = HouseSystem.PLACIDUS,
+    interval_minutes: int = 15,
+) -> CandidateChart | None:
+    """Best-scoring candidate over the whole day, ignoring the Morin filter."""
+    anchors = [e for e in events if not e.held_out]
+    if not anchors:
+        return None
+    jd = birth_to_jd(birth_data.birth_date, 720, birth_data.timezone_offset)
+    cands = generate_candidate_grid(
+        birth_data.birth_date, birth_data.latitude, birth_data.longitude,
+        birth_data.timezone_offset, interval_minutes=interval_minutes,
+        house_system=house_system,
+    )
+    scorers = build_scorers(tight=False)
+    return max(cands, key=lambda c: score_candidate(c, anchors, jd, scorers).training_score())
+
+
 class Rectifier:
     """
     Four-loop birth time rectifier.
@@ -283,6 +374,8 @@ class Rectifier:
             birth_data.birth_date, 720, birth_data.timezone_offset
         )
 
+        self.chance_p: float | None = None
+
         self.prior = morin_prior or build_morin_prior(
             birth_data.biography, birth_data.physical_description
         )
@@ -294,6 +387,26 @@ class Rectifier:
     # ------------------------------------------------------------------
     # Loop 0: Morin pre-filter
     # ------------------------------------------------------------------
+    def morin_exclusion_warning(self, rising_signs: list[int]) -> str:
+        """
+        Warn when the best-scoring time of the whole day has a rising sign that the
+        Morin filter removed from the search. The filter is a hard cut: a sign below
+        the threshold is never scored, so a wrong biography reading cannot be
+        corrected by the event evidence.
+        """
+        best = best_unfiltered_candidate(self.birth_data, self.events)
+        if best is None:
+            return ""
+        sign = int(best.ascendant // 30) + 1
+        if sign in rising_signs:
+            return ""
+        h, m = divmod(best.time_minutes, 60)
+        return (
+            f"MORIN FILTER WARNING: the best-scoring time over the whole day is "
+            f"{h:02d}:{m:02d} (rising sign {sign}), but the Morin filter excluded that "
+            f"rising sign, so it was never considered. Re-run with a uniform prior to compare."
+        )
+
     def loop0_morin_filter(self) -> list[int]:
         """Return plausible rising signs (those above 5% threshold)."""
         signs = self.prior.top_signs(threshold=0.05)
@@ -311,9 +424,11 @@ class Rectifier:
         rising_signs: list[int],
         house_system: HouseSystem = HouseSystem.PLACIDUS,
         interval: int = 15,
+        run_chance_test: bool = False,
     ) -> tuple[list[CandidateScore], list[CandidateChart]]:
         """
         Generate 15-min candidate grid, score all events, Bayesian update.
+        With run_chance_test, also sets self.chance_p (see chance_level_test).
         Returns (ranked candidate scores, candidate charts).
         """
         scorers = build_scorers(tight=False)
@@ -336,6 +451,16 @@ class Rectifier:
 
         candidate_scores = bayesian_update(candidate_scores, self.prior, candidates)
         candidate_scores.sort(key=lambda cs: cs.posterior_probability, reverse=True)
+
+        if run_chance_test and candidates:
+            self.chance_p, real_best, _ = chance_level_test(
+                self.birth_data, self.events, house_system=house_system,
+                interval_minutes=interval,
+            )
+            self._log(
+                f"  Chance-level test: p = {self.chance_p:.3f} "
+                f"(best score {real_best:.1f} vs {N_NULL_NATIVES} other natives)"
+            )
 
         if candidate_scores:
             top = candidate_scores[0]
@@ -467,7 +592,9 @@ class Rectifier:
         # --- Loop 1 (may repeat if evidence is sparse) ---
         max_loop1_attempts = 2
         for attempt in range(max_loop1_attempts):
-            scores_l1, candidates_l1 = self.loop1_broad_pass(rising_signs)
+            scores_l1, candidates_l1 = self.loop1_broad_pass(
+                rising_signs, run_chance_test=(attempt == 0)
+            )
 
             if not scores_l1:
                 return self._empty_result("No candidates generated after Morin filter.")
@@ -527,6 +654,20 @@ class Rectifier:
                 consensus=consensus,
             )
 
+        morin_warning = self.morin_exclusion_warning(rising_signs)
+        if morin_warning:
+            diversity_warning = (diversity_warning + " " + morin_warning).strip()
+
+        chance_p = self.chance_p if self.chance_p is not None else 1.0
+        if chance_p > CHANCE_ALPHA:
+            return self._chance_level_result(
+                top_candidate_time=top2.time_minutes,
+                chance_p=chance_p,
+                consensus=consensus,
+                ranked=scores_l2[:10],
+                diversity_warning=diversity_warning,
+            )
+
         # Determine if result is provisional
         is_provisional = (
             top2.posterior_probability < MIN_POSTERIOR_FOR_PRECISION
@@ -535,8 +676,13 @@ class Rectifier:
             or n_anchor < 4
         )
 
+        # House consensus is only a necessary condition: the angles (ASC/MC), which
+        # drive primary directions and solar arcs, are identical in every house
+        # system, so agreement is close to automatic. It can lower confidence but is
+        # never treated as independent evidence. The chance-level p-value scales it.
         confidence = min(
-            top2.posterior_probability * (consensus / 4) * min(cv_score, 1.0) * 2,
+            top2.posterior_probability * (consensus / 4) * min(cv_score, 1.0) * 2
+            * (1.0 - chance_p),
             1.0,
         )
 
@@ -561,6 +707,7 @@ class Rectifier:
             evidence_ledger=top2.technique_scores,
             ranked_candidates=scores_l2[:10],
             notes="; ".join(notes_parts),
+            chance_p_value=round(chance_p, 4),
         )
 
         self._log(f"\nResult: {result.summary()}")
@@ -582,6 +729,7 @@ class Rectifier:
             house_system_consensus=consensus,
             is_provisional=True,
             evidence_ledger=[],
+            chance_p_value=self.chance_p,
             notes=(
                 f"UNDERDETERMINED: cross-validation ratio {cv_score:.2f} is below the "
                 f"minimum threshold {CV_UNDERDETERMINED}. The scoring engine found a "
@@ -589,6 +737,42 @@ class Rectifier:
                 "The result is statistically unreliable. Add more diverse anchor events "
                 "or verify the held-out event dates."
             ),
+        )
+
+    def _chance_level_result(
+        self, top_candidate_time: int, chance_p: float, consensus: int,
+        ranked: list[CandidateScore], diversity_warning: str,
+    ) -> RectificationResult:
+        """
+        Emitted when the event list fits this native's best candidate no better than
+        it fits the best candidates of unrelated natives (see chance_level_test).
+        The top-scoring time is kept for inspection but carries no confidence.
+        """
+        h, m = divmod(top_candidate_time, 60)
+        notes = (
+            f"UNDERDETERMINED (chance level): the best candidate ({h:02d}:{m:02d}) does not "
+            f"fit these events better than the charts of unrelated people born at the "
+            f"same place do (p = {chance_p:.3f}, needs ≤ {CHANCE_ALPHA}). Any time reported here "
+            "could be produced by chance. Add more hard-dated anchor events of different "
+            "types (aim for 8–15), or re-check the birth date, place and time zone."
+        )
+        if consensus == 4:
+            notes += (
+                " House-system consensus is 4/4, but this is expected even at chance level "
+                "because the angles are the same in every house system."
+            )
+        if diversity_warning:
+            notes += " " + diversity_warning
+        return RectificationResult(
+            rectified_time_minutes=top_candidate_time,
+            uncertainty_minutes=720,
+            confidence_score=0.0,
+            house_system_consensus=consensus,
+            is_provisional=True,
+            evidence_ledger=[],
+            ranked_candidates=ranked,
+            notes=notes,
+            chance_p_value=round(chance_p, 4),
         )
 
     def _empty_result(self, reason: str) -> RectificationResult:

@@ -156,6 +156,7 @@ def generate_candidate_grid(
                 house_system=house_system,
                 planets=chart["planets"],
                 planet_latitudes=chart["planet_latitudes"],
+                geo_latitude=lat,
             )
         )
     return candidates
@@ -210,3 +211,46 @@ def sign_ruler(longitude: float) -> str:
     ]
     sign_idx = int(longitude / 30) % 12
     return rulers[sign_idx]
+
+
+# ---------------------------------------------------------------------------
+# Equatorial helpers (used by primary directions and progressed angles)
+# ---------------------------------------------------------------------------
+
+def true_obliquity(jd: float) -> float:
+    """True obliquity of the ecliptic at jd (degrees)."""
+    eps, _ = swe.calc_ut(jd, swe.ECL_NUT, MOSHIER_FLAG)
+    return eps[0]
+
+
+def ecliptic_to_equatorial(lon: float, lat: float, obliquity: float) -> tuple[float, float]:
+    """Ecliptic (lon, lat) → equatorial (RA, declination), all in degrees."""
+    ra, dec, _ = swe.cotrans((lon, lat, 1.0), -obliquity)
+    return ra % 360, dec
+
+
+def armc_from_mc(mc: float, obliquity: float) -> float:
+    """Right Ascension of the MC (= ARMC / sidereal time in degrees)."""
+    return ecliptic_to_equatorial(mc, 0.0, obliquity)[0]
+
+
+def progressed_angles(
+    natal_jd: float, natal_mc: float, geo_lat: float, age_years: float,
+    house_system: str = "P",
+) -> tuple[float, float]:
+    """
+    Progressed ASC and MC by the solar-arc-in-right-ascension method.
+
+    The natal ARMC is advanced by the RA arc travelled by the secondary-progressed
+    Sun; the progressed ASC is then the ascendant of that ARMC at the birth latitude.
+    natal_jd must be the candidate's own birth moment (not a noon placeholder).
+    """
+    eps = true_obliquity(natal_jd)
+    sun_n, _ = swe.calc_ut(natal_jd, swe.SUN, MOSHIER_FLAG)
+    sun_p, _ = swe.calc_ut(natal_jd + age_years, swe.SUN, MOSHIER_FLAG)
+    ra_n = ecliptic_to_equatorial(sun_n[0], sun_n[1], eps)[0]
+    ra_p = ecliptic_to_equatorial(sun_p[0], sun_p[1], eps)[0]
+    ra_arc = (ra_p - ra_n) % 360
+    prog_armc = (armc_from_mc(natal_mc, eps) + ra_arc) % 360
+    _, ascmc = swe.houses_armc(prog_armc, geo_lat, eps, house_system.encode())
+    return ascmc[0], ascmc[1]

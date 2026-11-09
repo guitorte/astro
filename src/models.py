@@ -102,6 +102,9 @@ class CandidateChart(BaseModel):
     house_system: HouseSystem
     planets: dict[str, float] = Field(default_factory=dict)           # name → ecliptic longitude
     planet_latitudes: dict[str, float] = Field(default_factory=dict)  # name → ecliptic latitude
+    # Geographic latitude of the birthplace. Needed for oblique ascension (primary
+    # directions to ASC/DSC) and for progressed angles. None = unknown (legacy callers).
+    geo_latitude: float | None = None
 
     @property
     def dsc(self) -> float:
@@ -167,6 +170,9 @@ class RectificationResult(BaseModel):
     evidence_ledger: list[TechniqueScore]
     ranked_candidates: list[CandidateScore] = Field(default_factory=list)
     notes: str = ""
+    # Global p-value of the chance-level test (None if not run). Small = the real
+    # event dates fit the best candidate better than random dates would.
+    chance_p_value: float | None = None
 
     def time_label(self) -> str:
         h, m = divmod(self.rectified_time_minutes, 60)

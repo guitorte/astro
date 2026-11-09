@@ -41,7 +41,7 @@ giving Sagittarius rising appropriate probability mass (calibrated via Neymar te
 Generates the filtered candidate grid at 15-minute intervals, scores every candidate
 against all anchor events using all five techniques, then applies a Bayesian update
 combining the Morin prior with the likelihood scores. Repeats if the top candidate's
-posterior ratio is below 3×.
+posterior ratio is below 3×. Also runs the chance-level test (see Quality Flags).
 
 ### Loop 2 — Narrow Pass (1-min resolution)
 Re-scores ±30 minutes around the Loop 1 winner at 1-minute resolution with tighter
@@ -98,8 +98,15 @@ Every result carries explicit quality indicators:
   rate < 80%, or fewer than 4 anchor events.
 - **`uncertainty_minutes`**: 5 min (≥8 events, stable bootstrap), 15 min (≥4 events),
   or 30 min (sparse data).
-- **`house_system_consensus`**: 0–4. Below 3 is a warning; 0 means the problem is
-  underdetermined and no reliable time can be output.
+- **`chance_p_value`**: does the event list fit this native better than it fits
+  unrelated people? The best score over the whole day for the real birth date is
+  ranked against the same statistic for 30 other birth dates at the same place
+  (shifted 1–15 years). If p > 0.05 the result is **UNDERDETERMINED**: the top time is
+  kept for inspection, but `confidence_score` is 0 and `uncertainty_minutes` is 720.
+- **`house_system_consensus`**: 0–4. Below 3 is a warning. It is only a necessary
+  condition: ASC and MC, which drive primary directions and solar arcs, are identical
+  in every house system, so 4/4 is close to automatic and is never treated as
+  independent evidence.
 - **Event diversity warning**: if >60% of events share the same type (e.g. all career
   peaks), the system warns of systematic house bias in the scoring output.
 
@@ -107,16 +114,73 @@ Every result carries explicit quality indicators:
 
 ## Known Limitations & Calibration Notes
 
+### Current measured performance (benchmark)
+All figures below are from synthetic charts (random date, place and birth minute).
+"Planted" events are dated when a solar-arc-directed natal planet exactly reaches a
+natal angle of the true chart; they exercise one technique only, so they are a floor,
+not a model of a real life.
+
+**Chance-level gate** (`chance_level_test`, 30 control natives, 15-minute grid):
+
+| Measure | Result | Target |
+|---|---|---|
+| False positives on random event lists (p ≤ 0.05) | 3 of 70 (4%) | about 5% |
+| Power on planted event lists (p ≤ 0.05) | 0 of 12 | high |
+
+**Recovery of the true time** from 6–8 planted events (12 charts per row):
+
+| Candidate grid | True time in top 3% of candidates | Median percentile of true time | Winner within 10 min of truth |
+|---|---|---|---|
+| 15 min, true time on the grid | 5 of 12 | 3% | 3 of 12 |
+| 15 min, true time 7 min off the grid | 0 of 12 | 23% | 0 of 12 |
+| 5 min | 2 of 12 | 5% | 0 of 12 |
+| 1 min | 3 of 12 | 7% | 0 of 12 |
+| 1 min, tight orbs | 8 of 12 | 1% | 1 of 12 |
+
+Two separate problems show up:
+
+1. **The 15-minute grid of Loop 1 is too coarse for the orbs.** Fifteen minutes of
+   clock time moves the MC by about 3.75°, which is about 3.75 years of solar arc, while
+   the widest orb is 2°. A true time that falls between grid points is simply not
+   represented, and Loop 2 only searches ±30 minutes around the Loop 1 winner.
+2. **Chance hits outscore the planted signal.** For a random date and a random
+   candidate, primary directions score at least one hit 52% of the time, solar arcs 44%,
+   progressions 25%, transits 23% (standard orbs; measured on 300 random pairs). Even
+   on a 1-minute grid with tight orbs, where the true time is usually in the top 1–3%,
+   some other time almost always scores higher.
+
+Any scoring change should be judged on these measurements first; two celebrity charts
+are too few to separate a better model from a lucky one. Reproduce the gate figures
+with `python -m eval.benchmark`.
+
 ### Homogeneous event set bias (Neymar calibration test)
 When all anchor events are of the same type (e.g. all `career_peak`), the scoring
 systematically favors whichever birth time best fits that house axis — regardless of
 the true birth time. This is the single most important failure mode.
 
-**Neymar Jr. (5 Feb 1992, Mogi das Cruzes, actual ~02:15):** with 5 career peaks and
-2 injury events, the system converged on Aquarius 05:11 rather than Sagittarius 02:15.
-Per-event analysis showed career events scored 31 points higher at 05:11, but the
-non-career events were nearly even. A balanced event set with family, legal, and
-relocation events would provide the missing signal.
+**Neymar Jr. (5 Feb 1992, Mogi das Cruzes, 02:15 local summer time = UTC−2, ASC 13°53′ Sag):**
+the fixture has 4 anchor events (2 career peaks, 1 relocation, 1 accident) and 1
+held-out event. Results with the correct time zone:
+
+| Run | Result | Distance from 02:15 |
+|---|---|---|
+| Default (Morin prior from the biography) | 06:30 | 4 h 15 min |
+| Uniform prior (Morin filter off) | 02:42 | 27 min |
+
+The Morin prior gives Sagittarius, the true rising sign, 2.3%. That is under the 5%
+cut, so Sagittarius is removed from the search before any event is scored. **The
+4-hour miss comes from the Morin filter, not from the event scoring.** The result now
+carries a `MORIN FILTER WARNING` when the best-scoring time of the whole day lies in
+an excluded sign. Either way the chance-level test gives p = 0.19: four events are too
+few to tell this chart from unrelated ones, so the 27-minute result may be luck.
+
+> **Correction (timezone).** Earlier versions of the calibration fixture used UTC−3.
+> Summer time ran from 20 Oct 1991 to 9 Feb 1992 and included São Paulo state (Decreto
+> de 25 de setembro de 1991, arts. 1–2), so the correct offset is UTC−2. It reproduces
+> the ASC 13°53′ Sagittarius published by Astrotheme; UTC−3 gives 28°13′ Sagittarius.
+> With UTC−3 the "confirmed time scores ≥ 30% of the top" check passed by accident.
+> With the correct offset 02:15 scores about 16% of the top 15-minute candidate
+> (03:00), so that test is marked `xfail(strict=True)`.
 
 **Rule of thumb:** include at least 3 distinct event types and keep no single type above
 50% of the anchor set.
@@ -127,6 +191,10 @@ sports keywords were not mapped to 9th-house themes. Fixed: football/soccer/spor
 now map to houses [5, 9]; `HOUSE_TO_RISING_SIGNS[9]` now includes Sagittarius (sign 9),
 which naturally rules the 9th house. Uniform prior floor raised from 0.1 → 0.25 per
 sign to prevent total exclusion on sparse keyword data.
+
+**Still open:** with the calibration biography the prior still gives Sagittarius only
+2.3%, so the true rising sign is excluded (see the Neymar table above). Because the cut
+is hard, event evidence can never bring an excluded sign back.
 
 ### Historical timezones
 The system trusts the `timezone_offset` value provided. For politically complex regions
@@ -199,8 +267,10 @@ Extracts hard-dated life events from biography text via Claude API
 pytest tests/ -v
 ```
 
-104 tests covering: ephemeris calculations, all 5 scoring techniques, Morin filter,
-4-loop rectifier, and FastAPI endpoints.
+137 tests (plus 1 documented expected failure) covering: ephemeris calculations, all 5
+scoring techniques, Morin filter, 4-loop rectifier, FastAPI endpoints, and regression
+tests for the timing fixes in `tests/test_timing_fixes.py` and the chance-level gate
+in `tests/test_chance_level.py`.
 
 ---
 
