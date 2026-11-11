@@ -124,9 +124,13 @@ def generate_candidate_grid(
     interval_minutes: int = 15,
     rising_signs: list[int] | None = None,
     house_system: HouseSystem = HouseSystem.PLACIDUS,
+    start_minute: int = 0,
+    end_minute: int = 1439,
 ) -> list[CandidateChart]:
     """
-    Generate all candidate charts for a 24-hour day at the given interval.
+    Generate candidate charts at the given interval, by default for the whole day.
+    start_minute/end_minute (inclusive, minutes after local midnight) restrict the
+    range; values outside 0–1439 are allowed and fall on the previous or next day.
 
     Args:
         birth_date: date of birth
@@ -137,7 +141,7 @@ def generate_candidate_grid(
         house_system: house system to use for cusp calculations
     """
     candidates = []
-    for t in range(0, 1440, interval_minutes):
+    for t in range(start_minute, end_minute + 1, interval_minutes):
         jd = birth_to_jd(birth_date, t, tz_offset)
         chart = calc_full_chart(jd, lat, lon, house_system)
 

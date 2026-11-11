@@ -27,6 +27,42 @@ src/
 
 ---
 
+## Two ways to use it
+
+**1. Window comparison: an approximate time is known** (`compare_window`, `POST
+/compare-window`). This is the recommended use. Given a recorded or remembered time, it
+scores every minute within ±30 minutes, reports the result in 10-minute slots as Tebbs
+does, and says whether the events prefer the recorded time, prefer a neighbour, or do
+not discriminate at all. It also reports when the Ascendant or Midheaven changes sign
+inside the window, which matters whether or not there are events to test.
+
+```python
+from src.window import compare_window
+report = compare_window(birth_data, events, approx_time_minutes=14 * 60 + 20)
+print(report.summary)
+```
+
+On synthetic charts with a planted signal (20 per row, recorded time up to 20 minutes
+from the truth):
+
+| Planted events | Error in dates | Window test passed | Best minute within 5 min of truth |
+|---|---|---|---|
+| 10 | none | 20 | 20 |
+| 5 | none | 20 | 20 |
+| 10 | ±6 months | 19 | 20 |
+| 5 | ±6 months | 10 | 20 |
+
+Random event lists passed the window test 1 time in 80. Reproduce with
+`python -m eval.window_benchmark`. The same caution applies as for every figure here:
+the planted events follow the rule the scorer looks for. On the two real calibration
+charts (4 and 5 anchor events) the verdict is `no_preference`.
+
+**2. Whole-day search: the time is unknown** (`Rectifier.rectify`, `POST /rectify`).
+The loops below. Much harder: the same events must single out one time among 1,440
+minutes, and with few or loosely dated events the result is usually UNDERDETERMINED.
+
+---
+
 ## The 4-Loop Algorithm
 
 The engine has two scoring methods. **`angle_first` is the default**; `classic` is the
@@ -267,7 +303,7 @@ uvicorn src.api:app --reload
     "birth_city": "Mogi das Cruzes",
     "latitude": -23.5228,
     "longitude": -46.1875,
-    "timezone_offset": -3.0,
+    "timezone_offset": -2.0,
     "biography": "Famous football player..."
   },
   "events": [
@@ -282,6 +318,24 @@ uvicorn src.api:app --reload
   "use_llm": false
 }
 ```
+
+### POST /compare-window
+
+Same `birth_data` and `events` as `/rectify`, plus the recorded time:
+
+```json
+{
+  "birth_data": { "...": "..." },
+  "events": [ { "...": "..." } ],
+  "approx_time": "14:20",
+  "window_minutes": 30,
+  "slot_minutes": 10
+}
+```
+
+Returns the verdict (`no_preference`, `supports_recorded` or `prefers_other`), the
+chance-level p-value for the window, any Ascendant or Midheaven sign change inside the
+window, and one entry per slot with its best minute, angles and contacts.
 
 ### POST /morin-filter
 Returns probability distribution over 12 rising signs from biography analysis.
@@ -300,7 +354,7 @@ Extracts hard-dated life events from biography text via Claude API
 pytest tests/ -v
 ```
 
-149 tests (plus 1 documented expected failure) covering: ephemeris calculations, all 5
+158 tests (plus 1 documented expected failure) covering: ephemeris calculations, all 5
 scoring techniques, Morin filter, 4-loop rectifier, FastAPI endpoints, and regression
 tests for the timing fixes in `tests/test_timing_fixes.py`, the chance-level gate in
 `tests/test_chance_level.py` and the angle-first scorer in `tests/test_angle_first.py`.
