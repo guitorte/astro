@@ -19,6 +19,7 @@ from .models import (
     RectificationResult, RisingSignPrior,
 )
 from .rectifier import Rectifier
+from .window import WindowReport, compare_window
 from .morin_filter import build_morin_prior, uniform_prior
 from .llm_extractor import extract_events_llm, build_llm_morin_prior
 
@@ -49,6 +50,14 @@ class RectifyRequest(BaseModel):
     events: list[LifeEventRequest] = Field(default_factory=list)
     use_llm: bool = False
     verbose: bool = False
+
+
+class CompareWindowRequest(BaseModel):
+    birth_data: BirthData
+    events: list[LifeEventRequest] = Field(default_factory=list)
+    approx_time: str = Field(description="Recorded or remembered local time, HH:MM")
+    window_minutes: int = Field(default=30, ge=5, le=180)
+    slot_minutes: int = Field(default=10, ge=1, le=60)
 
 
 class ExtractEventsRequest(BaseModel):
@@ -114,6 +123,28 @@ def extract_events(request: ExtractEventsRequest) -> list[dict]:
     """
     events = extract_events_llm(request.biography, request.held_out_fraction)
     return [e.model_dump() for e in events]
+
+
+@app.post("/compare-window", response_model=WindowReport)
+def compare_window_endpoint(request: CompareWindowRequest) -> WindowReport:
+    """
+    Compare a recorded or remembered birth time with its neighbours.
+
+    Use this when an approximate time is known. It reports, slot by slot, how well
+    the events fit, when the Ascendant or Midheaven changes sign inside the window,
+    and whether the events discriminate between times at all.
+    """
+    try:
+        hh, mm = request.approx_time.split(":")
+        approx = int(hh) * 60 + int(mm)
+        if not (0 <= int(hh) <= 23 and 0 <= int(mm) <= 59):
+            raise ValueError
+    except ValueError:
+        raise HTTPException(status_code=400, detail="approx_time must be HH:MM")
+    return compare_window(
+        request.birth_data, _parse_events(request.events), approx,
+        window_minutes=request.window_minutes, slot_minutes=request.slot_minutes,
+    )
 
 
 @app.post("/rectify", response_model=RectificationResult)

@@ -2,7 +2,9 @@
 Benchmark for the scoring engine: can it find a signal we planted, and does it
 stay quiet when there is none?
 
-    python -m eval.benchmark --cases 12 --natives 30
+    python -m eval.benchmark --cases 20 --events 10
+    python -m eval.benchmark --cases 20 --events 5 --jitter 0.5 --skip-random
+    python -m eval.benchmark --method classic
 
 For each synthetic native (random date, place and birth minute) it builds two
 event lists:
@@ -17,12 +19,12 @@ birth dates at the same place):
 
   false-positive rate   share of random lists with p <= alpha  (should be ~alpha)
   power                 share of planted lists with p <= alpha (should be high)
-  recovery              rank of the true time on the candidate grid for the
-                        planted lists (1 = found)
+  recovery              how far the best-scoring time is from the true time
+                        for the planted lists
 
 The true birth minute is random, so it usually falls between the points of the
-candidate grid; with --interval 15 that alone hides much of the signal (see the
-README). The planted events exercise solar arcs only, so this is a floor for
+candidate grid; with the classic 15-minute grid that alone hides much of the
+signal (see the README). The planted events exercise solar arcs only, so this is a floor for
 the engine, not a model of a real life.
 
 Any change to the scoring should be judged here before it is judged on a
@@ -37,7 +39,9 @@ import numpy as np
 
 from src.ephemeris import birth_to_jd, generate_candidate_grid, solar_arc_for_age
 from src.models import BirthData, EventType, EventWeight, LifeEvent
-from src.rectifier import CHANCE_ALPHA, build_scorers, chance_level_test, score_candidate
+from src.rectifier import (
+    CHANCE_ALPHA, DEFAULT_METHOD, LOOP1_INTERVAL, build_scorers, chance_level_test, score_candidate,
+)
 
 TYPES = [
     EventType.MARRIAGE, EventType.CAREER_PEAK, EventType.DEATH_OF_PARENT,
@@ -78,24 +82,32 @@ def random_events(bd, rng, n=8):
     ]
 
 
-def true_time_rank(birth, events, true_minute, interval):
+def true_time_rank(birth, events, true_minute, interval, method):
+    """(rank of the true time, grid size, distance in minutes from the winner to the truth)."""
     jd = birth_to_jd(birth.birth_date, 720, birth.timezone_offset)
     cands = generate_candidate_grid(birth.birth_date, birth.latitude, birth.longitude,
                                     birth.timezone_offset, interval_minutes=interval)
-    scorers = build_scorers()
+    scorers = build_scorers(method=method)
     scores = np.array([score_candidate(c, events, jd, scorers).training_score() for c in cands])
     times = np.array([c.time_minutes for c in cands])
     i = int(np.argmin(np.abs(times - true_minute)))
-    return int((scores > scores[i]).sum()) + 1, len(cands)
+    miss = abs(int(times[int(np.argmax(scores))]) - true_minute)
+    return int((scores > scores[i]).sum()) + 1, len(cands), min(miss, 1440 - miss)
 
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     ap.add_argument("--cases", type=int, default=12)
     ap.add_argument("--natives", type=int, default=30, help="unrelated natives per test")
-    ap.add_argument("--interval", type=int, default=15, help="candidate grid, minutes")
+    ap.add_argument("--method", default=DEFAULT_METHOD, choices=sorted(LOOP1_INTERVAL))
+    ap.add_argument("--interval", type=int, default=None, help="candidate grid, minutes (default: the method's)")
+    ap.add_argument("--events", type=int, default=8, help="planted events per chart")
+    ap.add_argument("--jitter", type=float, default=0.0,
+                    help="std. dev. in years of random error added to each planted date")
+    ap.add_argument("--skip-random", action="store_true", help="skip the false-positive runs")
     ap.add_argument("--seed", type=int, default=5)
     args = ap.parse_args()
+    interval = args.interval or LOOP1_INTERVAL[args.method]
 
     rng = np.random.default_rng(args.seed)
     null_p, alt_p, ranks = [], [], []
@@ -105,21 +117,28 @@ def main():
         birth = BirthData(name=f"synthetic {k}", birth_date=bd, birth_city="synthetic",
                           latitude=lat, longitude=lon, timezone_offset=float(round(lon / 15)))
         true_minute = int(rng.integers(0, 1440))
-        planted = planted_events(bd, lat, lon, birth.timezone_offset, true_minute)
-        null_p.append(chance_level_test(birth, random_events(bd, rng), interval_minutes=args.interval,
-                                        n_natives=args.natives, seed=k)[0])
-        alt_p.append(chance_level_test(birth, planted, interval_minutes=args.interval,
-                                       n_natives=args.natives, seed=k)[0])
-        ranks.append(true_time_rank(birth, planted, true_minute, args.interval))
-        print(f"case {k:2d}: random p={null_p[-1]:.3f}  planted p={alt_p[-1]:.3f}  "
-              f"true-time rank {ranks[-1][0]}/{ranks[-1][1]}  ({len(planted)} planted events)")
+        planted = planted_events(bd, lat, lon, birth.timezone_offset, true_minute, n=args.events)
+        if args.jitter:
+            planted = [e.model_copy(update={"date": e.date + timedelta(days=int(rng.normal(0, args.jitter * 365.25)))})
+                       for e in planted]
+        rnd = random_events(bd, rng, n=args.events)
+        test = dict(interval_minutes=interval, n_natives=args.natives, seed=k, method=args.method)
+        if not args.skip_random:
+            null_p.append(chance_level_test(birth, rnd, **test)[0])
+        alt_p.append(chance_level_test(birth, planted, **test)[0])
+        ranks.append(true_time_rank(birth, planted, true_minute, interval, args.method))
+        r = ranks[-1]
+        print(f"case {k:2d}: " + (f"random p={null_p[-1]:.3f}  " if null_p else "")
+              + f"planted p={alt_p[-1]:.3f}  true-time rank {r[0]}/{r[1]}  winner off by {r[2]} min", flush=True)
 
-    null_p, alt_p = np.array(null_p), np.array(alt_p)
+    alt_p = np.array(alt_p)
+    n = len(ranks)
     print()
-    print(f"false-positive rate (random lists, p<={CHANCE_ALPHA}): {(null_p <= CHANCE_ALPHA).mean():.0%}")
-    print(f"power (planted lists, p<={CHANCE_ALPHA}):             {(alt_p <= CHANCE_ALPHA).mean():.0%}")
-    print(f"true time ranked first: {sum(r == 1 for r, _ in ranks)}/{len(ranks)}; "
-          f"median rank {int(np.median([r for r, _ in ranks]))}/{ranks[0][1]}")
+    print(f"method {args.method}, grid {interval} min, {args.events} events, date jitter {args.jitter} y")
+    if null_p:
+        print(f"false positives (random lists, p<={CHANCE_ALPHA}): {int((np.array(null_p) <= CHANCE_ALPHA).sum())}/{n}")
+    print(f"power (planted lists, p<={CHANCE_ALPHA}):           {int((alt_p <= CHANCE_ALPHA).sum())}/{n}")
+    print(f"winner within 10 min of the true time:        {sum(r[2] <= 10 for r in ranks)}/{n}")
 
 
 if __name__ == "__main__":

@@ -124,9 +124,13 @@ def generate_candidate_grid(
     interval_minutes: int = 15,
     rising_signs: list[int] | None = None,
     house_system: HouseSystem = HouseSystem.PLACIDUS,
+    start_minute: int = 0,
+    end_minute: int = 1439,
 ) -> list[CandidateChart]:
     """
-    Generate all candidate charts for a 24-hour day at the given interval.
+    Generate candidate charts at the given interval, by default for the whole day.
+    start_minute/end_minute (inclusive, minutes after local midnight) restrict the
+    range; values outside 0–1439 are allowed and fall on the previous or next day.
 
     Args:
         birth_date: date of birth
@@ -137,7 +141,7 @@ def generate_candidate_grid(
         house_system: house system to use for cusp calculations
     """
     candidates = []
-    for t in range(0, 1440, interval_minutes):
+    for t in range(start_minute, end_minute + 1, interval_minutes):
         jd = birth_to_jd(birth_date, t, tz_offset)
         chart = calc_full_chart(jd, lat, lon, house_system)
 
@@ -239,18 +243,14 @@ def progressed_angles(
     house_system: str = "P",
 ) -> tuple[float, float]:
     """
-    Progressed ASC and MC by the solar-arc-in-right-ascension method.
-
-    The natal ARMC is advanced by the RA arc travelled by the secondary-progressed
-    Sun; the progressed ASC is then the ascendant of that ARMC at the birth latitude.
+    Progressed ASC and MC by the solar arc method described in Tebbs, "The Complete
+    Book of Chart Rectification", appendices B and C: the progressed MC is the natal
+    MC plus the solar arc in longitude, and the progressed ASC is the ascendant that
+    the tables of houses give for that MC at the birth latitude.
     natal_jd must be the candidate's own birth moment (not a noon placeholder).
     """
     eps = true_obliquity(natal_jd)
-    sun_n, _ = swe.calc_ut(natal_jd, swe.SUN, MOSHIER_FLAG)
-    sun_p, _ = swe.calc_ut(natal_jd + age_years, swe.SUN, MOSHIER_FLAG)
-    ra_n = ecliptic_to_equatorial(sun_n[0], sun_n[1], eps)[0]
-    ra_p = ecliptic_to_equatorial(sun_p[0], sun_p[1], eps)[0]
-    ra_arc = (ra_p - ra_n) % 360
-    prog_armc = (armc_from_mc(natal_mc, eps) + ra_arc) % 360
+    prog_mc = (natal_mc + solar_arc_for_age(natal_jd, age_years)) % 360
+    prog_armc = armc_from_mc(prog_mc, eps)
     _, ascmc = swe.houses_armc(prog_armc, geo_lat, eps, house_system.encode())
-    return ascmc[0], ascmc[1]
+    return ascmc[0], prog_mc

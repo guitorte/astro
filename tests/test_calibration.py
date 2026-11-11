@@ -192,7 +192,7 @@ class TestNeymarCalibration:
             interval_minutes=15,
             house_system=HouseSystem.PLACIDUS,
         )
-        scorers = build_scorers(tight=False)
+        scorers = build_scorers(tight=False, method="classic")  # written for the classic scoring
         scored = [score_candidate(c, neymar_events, natal_jd, scorers) for c in candidates]
         scored = bayesian_update(scored, prior, candidates)
         scored.sort(key=lambda cs: cs.posterior_probability, reverse=True)
@@ -229,7 +229,7 @@ class TestNeymarCalibration:
             interval_minutes=15,
             house_system=HouseSystem.PLACIDUS,
         )
-        scorers = build_scorers(tight=False)
+        scorers = build_scorers(tight=False, method="classic")  # written for the classic scoring
         scored = {
             c.time_minutes: score_candidate(c, neymar_events, natal_jd, scorers)
             for c in candidates
@@ -324,7 +324,7 @@ class TestBritneyCalibration:
             interval_minutes=15,
             house_system=HouseSystem.PLACIDUS,
         )
-        scorers = build_scorers(tight=False)
+        scorers = build_scorers(tight=False, method="classic")  # written for the classic scoring
         scored = [score_candidate(c, britney_events, natal_jd, scorers) for c in candidates]
         scored = bayesian_update(scored, prior, candidates)
         scored.sort(key=lambda cs: cs.posterior_probability, reverse=True)
@@ -351,7 +351,7 @@ class TestBritneyCalibration:
             interval_minutes=15,
             house_system=HouseSystem.PLACIDUS,
         )
-        scorers = build_scorers(tight=False)
+        scorers = build_scorers(tight=False, method="classic")  # written for the classic scoring
         scored = {
             c.time_minutes: score_candidate(c, britney_events, natal_jd, scorers)
             for c in candidates
@@ -388,7 +388,7 @@ class TestScoreInflation:
             interval_minutes=60,  # just 24 candidates for speed
             house_system=HouseSystem.PLACIDUS,
         )
-        scorers = build_scorers(tight=False)
+        scorers = build_scorers(tight=False, method="classic")  # written for the classic scoring
         if not candidates:
             pytest.skip("No candidates generated")
         c = candidates[0]
@@ -412,7 +412,7 @@ class TestScoreInflation:
             interval_minutes=15,
             house_system=HouseSystem.PLACIDUS,
         )
-        scorers = build_scorers(tight=False)
+        scorers = build_scorers(tight=False, method="classic")  # written for the classic scoring
         scored = [score_candidate(c, neymar_events, natal_jd, scorers) for c in candidates]
         scored = bayesian_update(scored, prior, candidates)
         top_posterior = max(cs.posterior_probability for cs in scored)

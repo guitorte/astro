@@ -66,13 +66,20 @@ def events():
 
 
 class TestBuildScorers:
-    def test_returns_five_scorers(self):
+    def test_default_is_angle_first(self):
         scorers = build_scorers()
-        assert len(scorers) == 5
+        assert [s.name for s in scorers] == ["angle_first"]
 
-    def test_tight_mode(self):
-        scorers_tight = build_scorers(tight=True)
-        assert len(scorers_tight) == 5
+    def test_classic_returns_five_scorers(self):
+        assert len(build_scorers(method="classic")) == 5
+        assert len(build_scorers(tight=True, method="classic")) == 5
+
+    def test_tight_mode_halves_the_orb(self):
+        assert build_scorers(tight=True)[0].orb == build_scorers()[0].orb / 2
+
+    def test_unknown_method_is_rejected(self):
+        with pytest.raises(ValueError):
+            build_scorers(method="nope")
 
 
 class TestScoreCandidate:
@@ -182,11 +189,19 @@ class TestRectifierLoops:
             assert abs(c.time_minutes - top_time) <= 15
 
     def test_loop3_returns_valid_consensus(self, birth_data, events):
-        rectifier = Rectifier(birth_data, events, verbose=False)
+        rectifier = Rectifier(birth_data, events, verbose=False, method="classic")
         # Use a known time for consensus check
         consensus, results = rectifier.loop3_consensus_check(720)
         assert 0 <= consensus <= 4
         assert len(results) == 4  # 4 house systems
+
+    def test_loop3_is_skipped_for_angle_first(self, birth_data, events):
+        """Only ASC and MC are scored, and they are the same in every house system."""
+        rectifier = Rectifier(birth_data, events, verbose=False)
+        assert rectifier.loop3_consensus_check(720) == (4, {})
+
+    def test_angle_first_searches_every_rising_sign(self, birth_data, events):
+        assert Rectifier(birth_data, events).loop0_morin_filter() == list(range(1, 13))
 
     def test_full_rectify_returns_result(self, birth_data, events):
         rectifier = Rectifier(birth_data, events, verbose=False)

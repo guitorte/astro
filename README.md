@@ -27,48 +27,109 @@ src/
 
 ---
 
-## The 4-Loop Algorithm
+## Two ways to use it
 
-### Loop 0 — Morin Structural Pre-filter
-Analyzes biography text with keyword matching (optionally blended with an LLM-generated
-prior) to assign probability weights to each of the 12 rising signs. Signs below 5%
-are excluded from candidate generation. Reduces the candidate pool from 288 → ~72.
+**1. Window comparison: an approximate time is known** (`compare_window`, `POST
+/compare-window`). This is the recommended use. Given a recorded or remembered time, it
+scores every minute within ±30 minutes, reports the result in 10-minute slots as Tebbs
+does, and says whether the events prefer the recorded time, prefer a neighbour, or do
+not discriminate at all. It also reports when the Ascendant or Midheaven changes sign
+inside the window, which matters whether or not there are events to test.
 
-Key design: sports/football biographies correctly activate 5th and 9th house keywords,
-giving Sagittarius rising appropriate probability mass (calibrated via Neymar test).
+```python
+from src.window import compare_window
+report = compare_window(birth_data, events, approx_time_minutes=14 * 60 + 20)
+print(report.summary)
+```
 
-### Loop 1 — Broad Scoring Pass (15-min resolution)
-Generates the filtered candidate grid at 15-minute intervals, scores every candidate
-against all anchor events using all five techniques, then applies a Bayesian update
-combining the Morin prior with the likelihood scores. Repeats if the top candidate's
-posterior ratio is below 3×. Also runs the chance-level test (see Quality Flags).
+On synthetic charts with a planted signal (20 per row, recorded time up to 20 minutes
+from the truth):
 
-### Loop 2 — Narrow Pass (1-min resolution)
-Re-scores ±30 minutes around the Loop 1 winner at 1-minute resolution with tighter
-orbs. Runs a bootstrap stability analysis (perturb event dates ±3 days, measure score
-variance) and cross-validates against held-out events.
+| Planted events | Error in dates | Window test passed | Best minute within 5 min of truth |
+|---|---|---|---|
+| 10 | none | 20 | 20 |
+| 5 | none | 20 | 20 |
+| 10 | ±6 months | 19 | 20 |
+| 5 | ±6 months | 10 | 20 |
 
-### Loop 3 — House System Consensus Check
-Re-runs Loop 1 for all four house systems (Placidus, Koch, Whole Sign, Regiomontanus).
-Reports consensus count (0–4). Result is provisional if fewer than 2 systems agree.
+Random event lists passed the window test 1 time in 80. Reproduce with
+`python -m eval.window_benchmark`. The same caution applies as for every figure here:
+the planted events follow the rule the scorer looks for. On the two real calibration
+charts (4 and 5 anchor events) the verdict is `no_preference`.
+
+**2. Whole-day search: the time is unknown** (`Rectifier.rectify`, `POST /rectify`).
+The loops below. Much harder: the same events must single out one time among 1,440
+minutes, and with few or loosely dated events the result is usually UNDERDETERMINED.
 
 ---
 
-## Scoring Techniques
+## The 4-Loop Algorithm
 
-Techniques are weighted by their mathematical independence:
+The engine has two scoring methods. **`angle_first` is the default**; `classic` is the
+original five-technique sum, kept for comparison (`Rectifier(..., method="classic")`).
+
+### Loop 0 — Morin prior
+Analyzes biography text with keyword matching (optionally blended with an LLM-generated
+prior) to assign a probability to each of the 12 rising signs.
+
+- `angle_first`: the prior only **weights** candidates. All twelve rising signs are
+  searched, and the prior is scaled so that it can break a tie but cannot overrule the
+  events. Reading the Ascendant from appearance or character is listed among the less
+  reliable rectification methods by Tebbs (ch. 1).
+- `classic`: signs below 5% are **excluded** before any event is scored. This is what
+  sent the Neymar calibration four hours off (see Calibration Notes).
+
+### Loop 1 — Broad pass
+Scores every candidate against the anchor events, applies the Bayesian update with the
+Morin prior, and runs the chance-level test (see Quality Flags). Grid: 2 minutes for
+`angle_first` (about 0.5° of MC, half its 1° orb), 15 minutes for `classic`.
+
+### Loop 2 — Narrow pass (1-minute resolution)
+Re-scores ±30 minutes around the Loop 1 winner at 1-minute resolution with half the orb.
+Runs a bootstrap stability analysis (perturb event dates ±3 days, measure score
+variance) and cross-validates against held-out events.
+
+### Loop 3 — House system consensus (`classic` only)
+Re-runs Loop 1 for Placidus, Koch, Whole Sign and Regiomontanus and counts agreement.
+`angle_first` scores only ASC and MC, which are identical in every house system, so
+the check cannot disagree and is skipped (reported as 4).
+
+---
+
+## Scoring
+
+### `angle_first` (default)
+Follows the procedure in Carol Tebbs, *The Complete Book of Chart Rectification*
+(Llewellyn), chapters 1, 2 and 8 and appendices B and C.
+
+| Rule | Source |
+|---|---|
+| Only the four angles are scored; house cusps are ignored | Tebbs |
+| Solar arc directions lead the search (planets to angles, angles to planets) | Tebbs |
+| Orb of 1°, and a closer contact counts for more | Tebbs (orb); linear fade is our choice |
+| Progressions (Sun–Mars, plus progressed Moon to natal planets) and Saturn–Pluto transits confirm | Tebbs |
+| Painful events (deaths, divorce, accident, illness, arrest…) weigh 4× | Tebbs estimates four to five times |
+| One contact per technique per event (the closest) | our choice |
+| Confirmations count only on top of a solar arc contact, at half weight | our choice, measured below |
+| Only conjunctions with the angles (this covers oppositions); no squares | our choice |
+
+Not implemented from the book: starting from the natal 1–2° hard-aspect "hooks", and
+Dobyns' rule that an event must show in all three systems. The strict version of that
+rule (`mode="strict"`) found 0 of 4 planted charts in a pilot run and was not pursued.
+
+### `classic`
 
 | # | Technique | Weight | Basis |
 |---|---|---|---|
-| 1 | Primary directions (Naibod arc) | **2.0** | Right Ascension — fully independent |
+| 1 | Primary directions (Naibod arc) | **2.0** | RA for MC/IC, oblique ascension for ASC/DSC |
 | 2 | Secondary progressions / progressed Moon | **1.5** | 1 day = 1 year |
 | 3 | Solar arc directions | **1.2** | Progressed Sun arc (correlated with #2) |
-| 4 | Annual profections / lord of year | **1.0** | Different time scale — independent |
+| 4 | Annual profections / lord of year | **1.0** | Different time scale |
 | 5 | Outer-planet transits to angles | **1.0** | Real-time positions |
 
-Only hits to **time-sensitive points** score: angles (ASC/MC/DSC/IC) and house cusps
-relevant to the event type. Transits to natal planets that are not angles are excluded —
-they fire for everyone born in the same year and carry zero discriminating power.
+Hits to angles and to the house cusps relevant to the event type score, up to three
+per technique per event, with orbs up to 2°. Progressed angles use the solar arc in
+longitude on the MC and the tables of houses for the ASC (Tebbs, appendices B and C).
 
 ---
 
@@ -115,43 +176,46 @@ Every result carries explicit quality indicators:
 ## Known Limitations & Calibration Notes
 
 ### Current measured performance (benchmark)
-All figures below are from synthetic charts (random date, place and birth minute).
-"Planted" events are dated when a solar-arc-directed natal planet exactly reaches a
-natal angle of the true chart; they exercise one technique only, so they are a floor,
-not a model of a real life.
+All figures are from synthetic charts (random date, place and birth minute). "Planted"
+events are dated when a solar arc contact between a natal planet and an angle of the
+true chart is exact. **This tests whether the engine can find the kind of signal it
+assumes. It says nothing about whether real lives follow that signal.**
 
-**Chance-level gate** (`chance_level_test`, 30 control natives, 15-minute grid):
+**Recovery: best-scoring time within 10 minutes of the true time** (20 charts per cell)
 
-| Measure | Result | Target |
-|---|---|---|
-| False positives on random event lists (p ≤ 0.05) | 3 of 70 (4%) | about 5% |
-| Power on planted event lists (p ≤ 0.05) | 0 of 12 | high |
-
-**Recovery of the true time** from 6–8 planted events (12 charts per row):
-
-| Candidate grid | True time in top 3% of candidates | Median percentile of true time | Winner within 10 min of truth |
+| Planted events | Error in event dates | `classic` | `angle_first` |
 |---|---|---|---|
-| 15 min, true time on the grid | 5 of 12 | 3% | 3 of 12 |
-| 15 min, true time 7 min off the grid | 0 of 12 | 23% | 0 of 12 |
-| 5 min | 2 of 12 | 5% | 0 of 12 |
-| 1 min | 3 of 12 | 7% | 0 of 12 |
-| 1 min, tight orbs | 8 of 12 | 1% | 1 of 12 |
+| 10 | none | 5 | 17 |
+| 5 | none | 4 | 15 |
+| 10 | ±6 months (std. dev.) | 2 | 17 |
+| 5 | ±6 months (std. dev.) | 2 | 11 (5 with the earliest-contact events of `eval.benchmark`) |
 
-Two separate problems show up:
+`classic` was run on a 4-minute grid here (finer than its normal 15), `angle_first` on
+its 2-minute grid. Other combinations tried for `angle_first`, same four rows: solar
+arc alone 17, 14, 18, 12; transits and progressions scoring independently at half
+weight 17, 14, 15, 9; confirmations at full weight 17, 11, 12, 8.
 
-1. **The 15-minute grid of Loop 1 is too coarse for the orbs.** Fifteen minutes of
-   clock time moves the MC by about 3.75°, which is about 3.75 years of solar arc, while
-   the widest orb is 2°. A true time that falls between grid points is simply not
-   represented, and Loop 2 only searches ±30 minutes around the Loop 1 winner.
-2. **Chance hits outscore the planted signal.** For a random date and a random
-   candidate, primary directions score at least one hit 52% of the time, solar arcs 44%,
-   progressions 25%, transits 23% (standard orbs; measured on 300 random pairs). Even
-   on a 1-minute grid with tight orbs, where the true time is usually in the top 1–3%,
-   some other time almost always scores higher.
+**Chance-level gate** (`chance_level_test`, 30 control natives)
 
-Any scoring change should be judged on these measurements first; two celebrity charts
-are too few to separate a better model from a lucky one. Reproduce the gate figures
-with `python -m eval.benchmark`.
+| Measure | `angle_first` | `classic` |
+|---|---|---|
+| False positives on random event lists (p ≤ 0.05) | 0 of 40 | 3 of 70 |
+| Power, 10 planted events with exact dates | 12 of 20 | 0 of 12 (8 events) |
+| Power, 5 planted events, dates ±6 months | 2 of 20 | not run |
+
+What this shows:
+
+1. With ten well-dated events the new scoring usually finds a planted time; the old one
+   rarely did.
+2. **Few events and imprecise dates are the limit.** With five events dated to within
+   about six months, recovery falls to between a quarter and a half depending on which
+   contacts the events fall on, and the gate passes 2 times in 20.
+3. The gate is conservative: it needs the real chart to beat all 30 controls, and
+   passes only 12 of 20 charts that do carry a planted signal.
+
+Reproduce the recovery table with `python -m eval.compare_variants 20 2` (arguments:
+charts, grid minutes, variants, events, date error in years) and the gate figures with
+`python -m eval.benchmark --cases 20 --events 10` (see `--help`).
 
 ### Homogeneous event set bias (Neymar calibration test)
 When all anchor events are of the same type (e.g. all `career_peak`), the scoring
@@ -162,17 +226,22 @@ the true birth time. This is the single most important failure mode.
 the fixture has 4 anchor events (2 career peaks, 1 relocation, 1 accident) and 1
 held-out event. Results with the correct time zone:
 
-| Run | Result | Distance from 02:15 |
-|---|---|---|
-| Default (Morin prior from the biography) | 06:30 | 4 h 15 min |
-| Uniform prior (Morin filter off) | 02:42 | 27 min |
+| Run | Result | Distance from 02:15 | Chance-level p |
+|---|---|---|---|
+| `classic`, Morin prior | 06:30 | 4 h 15 min | 0.23 |
+| `classic`, uniform prior | 02:42 | 27 min | 0.23 |
+| `angle_first` (Morin or uniform prior) | 02:46 | 31 min | 0.77 |
 
-The Morin prior gives Sagittarius, the true rising sign, 2.3%. That is under the 5%
-cut, so Sagittarius is removed from the search before any event is scored. **The
-4-hour miss comes from the Morin filter, not from the event scoring.** The result now
-carries a `MORIN FILTER WARNING` when the best-scoring time of the whole day lies in
-an excluded sign. Either way the chance-level test gives p = 0.19: four events are too
-few to tell this chart from unrelated ones, so the 27-minute result may be luck.
+In `classic` the Morin prior gives Sagittarius, the true rising sign, 2.3%. That is
+under the 5% cut, so Sagittarius is removed before any event is scored: **the 4-hour
+miss comes from the Morin filter, not from the event scoring.** `angle_first` no longer
+excludes signs. In every run the chance-level test fails, so the result is reported as
+UNDERDETERMINED: four events are too few to tell this chart from unrelated ones, and
+landing about half an hour from the recorded time may be luck.
+
+**Britney Spears (2 Dec 1981, McComb MS, 01:30 CST):** 5 anchor events, three of them
+inside twelve months. `classic` gives 04:47 (p = 0.32), `angle_first` gives 18:26
+(p = 0.42). Both are far from 01:30 and both are reported as UNDERDETERMINED.
 
 > **Correction (timezone).** Earlier versions of the calibration fixture used UTC−3.
 > Summer time ran from 20 Oct 1991 to 9 Feb 1992 and included São Paulo state (Decreto
@@ -234,7 +303,7 @@ uvicorn src.api:app --reload
     "birth_city": "Mogi das Cruzes",
     "latitude": -23.5228,
     "longitude": -46.1875,
-    "timezone_offset": -3.0,
+    "timezone_offset": -2.0,
     "biography": "Famous football player..."
   },
   "events": [
@@ -249,6 +318,24 @@ uvicorn src.api:app --reload
   "use_llm": false
 }
 ```
+
+### POST /compare-window
+
+Same `birth_data` and `events` as `/rectify`, plus the recorded time:
+
+```json
+{
+  "birth_data": { "...": "..." },
+  "events": [ { "...": "..." } ],
+  "approx_time": "14:20",
+  "window_minutes": 30,
+  "slot_minutes": 10
+}
+```
+
+Returns the verdict (`no_preference`, `supports_recorded` or `prefers_other`), the
+chance-level p-value for the window, any Ascendant or Midheaven sign change inside the
+window, and one entry per slot with its best minute, angles and contacts.
 
 ### POST /morin-filter
 Returns probability distribution over 12 rising signs from biography analysis.
@@ -267,10 +354,10 @@ Extracts hard-dated life events from biography text via Claude API
 pytest tests/ -v
 ```
 
-137 tests (plus 1 documented expected failure) covering: ephemeris calculations, all 5
+158 tests (plus 1 documented expected failure) covering: ephemeris calculations, all 5
 scoring techniques, Morin filter, 4-loop rectifier, FastAPI endpoints, and regression
-tests for the timing fixes in `tests/test_timing_fixes.py` and the chance-level gate
-in `tests/test_chance_level.py`.
+tests for the timing fixes in `tests/test_timing_fixes.py`, the chance-level gate in
+`tests/test_chance_level.py` and the angle-first scorer in `tests/test_angle_first.py`.
 
 ---
 

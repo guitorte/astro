@@ -143,3 +143,27 @@ class TestRectify:
         events = [{"description": "X", "event_type": "NOT_VALID", "date": "1990-01-01"}]
         response = client.post("/rectify", json=self._minimal_request(events=events))
         assert response.status_code == 422
+
+
+class TestCompareWindow:
+    def _request(self, **over):
+        req = {
+            "birth_data": {"name": "t", "birth_date": "1970-06-15", "birth_city": "x",
+                           "latitude": 40.0, "longitude": -3.7, "timezone_offset": 1.0},
+            "events": [{"description": "move", "event_type": "relocation", "date": "1995-03-10"}],
+            "approx_time": "10:45", "window_minutes": 10, "slot_minutes": 10,
+        }
+        req.update(over)
+        return req
+
+    def test_returns_a_report(self):
+        response = client.post("/compare-window", json=self._request())
+        assert response.status_code == 200
+        body = response.json()
+        assert body["recorded_time"] == "10:45"
+        assert body["verdict"] in {"no_preference", "supports_recorded", "prefers_other"}
+        assert body["slots"][0]["start"] == "10:35" and body["slots"][-1]["end"] == "10:55"
+
+    def test_rejects_a_bad_time(self):
+        assert client.post("/compare-window", json=self._request(approx_time="25:00")).status_code == 400
+        assert client.post("/compare-window", json=self._request(approx_time="soon")).status_code == 400
